@@ -1,0 +1,73 @@
+name: hiretrack
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: hiretrack
+      POSTGRES_PASSWORD: hiretrack
+      POSTGRES_DB: hiretrack
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hiretrack -d hiretrack"]
+      interval: 5s
+      retries: 20
+
+  kafka:
+    image: apache/kafka:3.8.0          # single-node KRaft (no ZooKeeper)
+    ports: ["9092:9092"]
+    environment:
+      # Two listeners: kafka:19092 for other containers (Phase 12), localhost:9092 for services run on your machine
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:19092,PLAINTEXT_HOST://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:19092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_RETENTION_HOURS: -1   # keep events forever locally, so read models can be rebuilt (Phase 7)
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 10s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+
+  s3mock:                              # S3-compatible store (MinIO no longer publishes Docker images)
+    image: adobe/s3mock:5.2.3
+    environment:
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: hiretrack-resumes   # created on start-up, no setup step
+      COM_ADOBE_TESTING_S3MOCK_STORE_ROOT: /s3mockroot
+      COM_ADOBE_TESTING_S3MOCK_STORE_RETAIN_FILES_ON_EXIT: "true"         # keep uploaded resumes across restarts
+    ports: ["9000:9090"]               # host 9000 keeps S3_ENDPOINT's default; 9090 is Prometheus in Phase 12
+    volumes: [s3data:/s3mockroot]
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/favicon.ico"]
+      interval: 5s
+      retries: 20
+    # S3Mock accepts any access/secret key, so the app's hiretrack / hiretrack-secret defaults still work
+
+  wiremock:
+    image: wiremock/wiremock:3.9.1
+    ports: ["8089:8080"]
+    command: ["--global-response-templating", "--verbose"]
+    volumes:
+      - ./wiremock:/home/wiremock
+
+volumes:
+  pgdata:
+  s3data:

@@ -6,7 +6,7 @@
 browser ──► http://localhost (nginx: React app + /api proxy)
               └─► api-gateway ──► identity · resume · match · application · job-feed · analytics
                                    └─► ai-service ──► OpenAI API (real, with your key)
-            PostgreSQL · Kafka · Redis · MinIO · WireMock      Prometheus · Grafana · Tempo · Loki
+            PostgreSQL · Kafka · Redis · S3Mock · WireMock      Prometheus · Grafana · Tempo · Loki
 ```
 
 Everything runs in containers except the OpenAI API, which is called over the internet with the key in your `.env`, and Adzuna, if you set its keys.
@@ -178,11 +178,11 @@ services:
     image: hiretrack/resume-service:local
     environment:
       <<: *java-env
-      S3_ENDPOINT: http://minio:9000
+      S3_ENDPOINT: http://s3mock:9090
     depends_on:
       postgres: { condition: service_healthy }
       kafka: { condition: service_healthy }
-      minio: { condition: service_healthy }
+      s3mock: { condition: service_healthy }
     ports: ["8082:8080"]
 
   ai-service:
@@ -347,7 +347,7 @@ HireTrack is running.
   Grafana:      http://localhost:3000
   Prometheus:   http://localhost:9090
   Alerts:       http://localhost:9093
-  MinIO:        http://localhost:9001  (hiretrack / hiretrack-secret)
+  S3 (S3Mock):  http://localhost:9000  (path-style, no login, no console)
 EOF
 ```
 
@@ -424,7 +424,7 @@ docker compose --env-file .env -f deploy/docker-compose.yml -f deploy/docker-com
   --format 'table {{.Service}}\t{{.Status}}'
 ```
 
-Expected: all eight services, `api-gateway`, `frontend`, `postgres`, `kafka`, `redis`, `minio` and `wiremock` show `Up ... (healthy)`, or `Up` for those without a health check.
+Expected: all eight services, `api-gateway`, `frontend`, `postgres`, `kafka`, `redis`, `s3mock` and `wiremock` show `Up ... (healthy)`, or `Up` for those without a health check.
 
 ```bash
 # 2. The app and the API answer through nginx

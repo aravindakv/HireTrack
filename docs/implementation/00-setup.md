@@ -1,6 +1,6 @@
 # Phase 0 — Tools, Repository and Local Infrastructure
 
-**Goal:** a Gradle monorepo that builds, plus everything the services need running on your laptop: PostgreSQL with one schema per service, Kafka, Redis, S3-compatible storage (MinIO) and WireMock. You also create the dev signing keys and a script that mints test JWTs, so you can call any service without running identity-service.
+**Goal:** a Gradle monorepo that builds, plus everything the services need running on your laptop: PostgreSQL with one schema per service, Kafka, Redis, S3-compatible storage (Adobe S3Mock) and WireMock. You also create the dev signing keys and a script that mints test JWTs, so you can call any service without running identity-service.
 
 **Time:** about 2 hours.
 
@@ -11,7 +11,7 @@
 | Tool | Version | Check |
 | --- | --- | --- |
 | JDK (Eclipse Temurin) | 25 | `java -version` → `openjdk version "25...` |
-| Gradle (only to create the wrapper once) | 9.1.0 | `gradle --version` |
+| Gradle (only to create the wrapper once) | 9.9.1 | `gradle --version` |
 | Docker Engine + Compose plugin | 24+ / v2 | `docker compose version` |
 | Node.js | 20+ | `node --version` |
 | OpenSSL | 3.x | `openssl version` |
@@ -23,7 +23,7 @@ On Ubuntu, for example:
 
 ```bash
 sudo apt-get install -y temurin-25-jdk jq curl openssl   # after adding the Adoptium apt repo
-curl -s "https://get.sdkman.io" | bash && sdk install java 25-tem && sdk install gradle 9.1.0
+curl -s "https://get.sdkman.io" | bash && sdk install java 25-tem && sdk install gradle 9.9.1
 ```
 
 **Verify**
@@ -40,10 +40,15 @@ Expected: Java 25, Compose v2.x, Node v20 or later.
 
 ## Step 0.2 — Create the repository
 
+The code lives in a `hiretrack/` folder **inside the existing HireTrack repository**, next to `docs/`. Don't run `git init` there: it's already part of the repo, and a nested repository would never reach GitHub.
+
 ```bash
+cd HireTrack                     # the repository you cloned (it holds README.md and docs/)
 mkdir hiretrack && cd hiretrack
-git init
-gradle wrapper --gradle-version 9.1.0 --distribution-type bin
+# Gradle only creates a wrapper inside an existing build, so start with a one-line settings file.
+# Step 0.5 replaces it with the full version.
+echo 'rootProject.name = "hiretrack"' > settings.gradle.kts
+gradle wrapper --gradle-version 9.9.1 --distribution-type bin
 mkdir -p build-logic/src/main/kotlin gradle platform services contracts/events \
          deploy/postgres deploy/wiremock/mappings deploy/wiremock/__files deploy/dev-keys \
          tools frontend perf e2e ai-evals
@@ -96,7 +101,7 @@ HIRETRACK_INTERNAL_TOKEN=dev-internal-token
 ./gradlew --version | grep Gradle
 ```
 
-Expected: `Gradle 9.1.0`. Gradle 9.1 is the first release that runs and compiles Java 25.
+Expected: `Gradle 9.9.1`. Gradle 9.1 was the first release that runs and compiles Java 25.
 
 ---
 
@@ -117,7 +122,8 @@ pdfbox = "3.0.5"
 aws-sdk = "2.31.6"
 wiremock = "3.9.1"
 pact = "4.6.17"
-versions-plugin = "0.52.0"
+s3mock = "5.2.3"
+versions-plugin = "0.67.0"
 
 [libraries]
 # Gradle plugins used by build-logic
@@ -137,9 +143,10 @@ aws-s3 = { module = "software.amazon.awssdk:s3" }
 wiremock = { module = "org.wiremock:wiremock-standalone", version.ref = "wiremock" }
 pact-consumer = { module = "au.com.dius.pact.consumer:junit5", version.ref = "pact" }
 pact-provider = { module = "au.com.dius.pact.provider:junit5spring", version.ref = "pact" }
+s3mock-testcontainers = { module = "com.adobe.testing:s3mock-testcontainers", version.ref = "s3mock" }
 
 [plugins]
-versions = { id = "com.github.ben-manes.versions", version.ref = "versions-plugin" }
+versions = { id = "io.github.ben-manes.versions", version.ref = "versions-plugin" }
 ```
 
 ---
@@ -396,29 +403,19 @@ services:
       interval: 5s
       retries: 20
 
-  minio:
-    image: minio/minio:latest          # pin to the RELEASE.* tag you pulled before committing
-    command: server /data --console-address ":9001"
+  s3mock:                              # S3-compatible store (MinIO no longer publishes Docker images)
+    image: adobe/s3mock:5.2.3
     environment:
-      MINIO_ROOT_USER: hiretrack
-      MINIO_ROOT_PASSWORD: hiretrack-secret
-    ports: ["9000:9000", "9001:9001"]
-    volumes: [miniodata:/data]
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: hiretrack-resumes   # created on start-up, no setup step
+      COM_ADOBE_TESTING_S3MOCK_STORE_ROOT: /s3mockroot
+      COM_ADOBE_TESTING_S3MOCK_STORE_RETAIN_FILES_ON_EXIT: "true"         # keep uploaded resumes across restarts
+    ports: ["9000:9090"]               # host 9000 keeps S3_ENDPOINT's default; 9090 is Prometheus in Phase 12
+    volumes: [s3data:/s3mockroot]
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/favicon.ico"]
       interval: 5s
       retries: 20
-
-  minio-setup:                         # one-shot helper; run on demand, not started by "up"
-    image: minio/mc:latest             # pin as above
-    profiles: ["tools"]
-    depends_on:
-      minio: { condition: service_healthy }
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 hiretrack hiretrack-secret &&
-      mc mb --ignore-existing local/hiretrack-resumes &&
-      echo bucket-ready"
+    # S3Mock accepts any access/secret key, so the app's hiretrack / hiretrack-secret defaults still work
 
   wiremock:
     image: wiremock/wiremock:3.9.1
@@ -429,7 +426,7 @@ services:
 
 volumes:
   pgdata:
-  miniodata:
+  s3data:
 ```
 
 Start it:
@@ -479,13 +476,13 @@ Expected: `Created topic smoke.`, then `smoke` in the list.
 ```bash
 # 4. Redis
 docker compose -f deploy/docker-compose.yml exec -T redis redis-cli ping
-# 5. MinIO bucket (resume-service also creates it on start-up locally)
-docker compose -f deploy/docker-compose.yml run --rm minio-setup | grep bucket-ready
+# 5. S3 bucket (S3Mock creates it on start-up; resume-service also creates it if missing)
+curl -s localhost:9000/ | grep -o hiretrack-resumes
 # 6. WireMock
 curl -s localhost:8089/__admin/mappings | jq '.meta.total'
 ```
 
-Expected: `PONG`, `bucket-ready`, `0`.
+Expected: `PONG`, `hiretrack-resumes`, `0`.
 
 ---
 

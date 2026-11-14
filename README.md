@@ -26,9 +26,10 @@ AI runs on the **OpenAI API** by default, and Anthropic Claude can be switched o
 
 ## Running the production build locally
 
-Once you've built it by following the guide:
+The application code lives in [`hiretrack/`](hiretrack/). Once you've built it by following the guide:
 
 ```bash
+cd hiretrack
 cp .env.example .env          # add OPENAI_API_KEY, OPENAI_MODEL, OPENAI_FEED_MODEL (and Adzuna keys for the Job Feed)
 tools/stack-up.sh             # builds and starts everything
 open http://localhost

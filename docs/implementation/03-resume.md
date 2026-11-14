@@ -4,7 +4,7 @@
 
 **Time:** 1–2 days.
 
-**Runs on its own with:** Docker Compose infrastructure (Postgres, Kafka, MinIO) and a token from `tools/mint-jwt.sh`. No other HireTrack service is needed.
+**Runs on its own with:** Docker Compose infrastructure (Postgres, Kafka, S3Mock) and a token from `tools/mint-jwt.sh`. No other HireTrack service is needed.
 
 ---
 
@@ -34,7 +34,7 @@ dependencies {
     runtimeOnly("org.postgresql:postgresql")
 
     testImplementation(project(":platform:test-support"))
-    testImplementation("org.testcontainers:testcontainers-minio")
+    testImplementation(libs.s3mock.testcontainers)
 }
 ```
 
@@ -73,7 +73,7 @@ hiretrack:
   resume:
     max-characters: 20000
   storage:
-    endpoint: ${S3_ENDPOINT:http://localhost:9000}     # MinIO locally; leave empty on AWS
+    endpoint: ${S3_ENDPOINT:http://localhost:9000}     # S3Mock locally; leave empty on AWS
     region: ${S3_REGION:us-east-1}
     bucket: ${S3_BUCKET:hiretrack-resumes}
     access-key: ${S3_ACCESS_KEY:hiretrack}            # empty on AWS: IRSA role credentials are used
@@ -269,7 +269,7 @@ public class PdfTextExtractor {
 }
 ```
 
-## Step 3.6 — Object storage (S3 / MinIO)
+## Step 3.6 — Object storage (S3 / S3Mock)
 
 `config/StorageConfig.java`:
 
@@ -710,12 +710,11 @@ Expected:
 4. `{"resumeId":2}`, then `"INTERNAL_AUTH_REQUIRED"`
 
 ```bash
-# 5. The PDF is in MinIO
-docker compose -f deploy/docker-compose.yml run --rm --entrypoint sh minio-setup -c \
-  "mc alias set local http://minio:9000 hiretrack hiretrack-secret >/dev/null && mc ls --recursive local/hiretrack-resumes"
+# 5. The PDF is in S3Mock (ListObjectsV2, path-style; S3Mock needs no credentials)
+curl -s "localhost:9000/hiretrack-resumes?list-type=2" | grep -o "<Key>[^<]*</Key>"
 ```
 
-Expected: one `resumes/1/<uuid>.pdf` object.
+Expected: one `<Key>resumes/1/<uuid>.pdf</Key>` line.
 
 ## Step 3.9 — Tests
 
@@ -830,7 +829,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.util.LinkedMultiValueMap;
-import org.testcontainers.minio.MinIOContainer;
+import com.adobe.testing.s3mock.testcontainers.S3MockContainer;
 
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -840,14 +839,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class ResumeIT extends IntegrationTest {
 
-    static final MinIOContainer MINIO = new MinIOContainer("minio/minio:latest");   // pin a RELEASE.* tag
-    static { MINIO.start(); }
+    static final S3MockContainer S3 = new S3MockContainer("5.2.3");   // same image tag as deploy/docker-compose.yml
+    static { S3.start(); }
 
     @DynamicPropertySource
     static void s3(DynamicPropertyRegistry r) {
-        r.add("hiretrack.storage.endpoint", MINIO::getS3URL);
-        r.add("hiretrack.storage.access-key", MINIO::getUserName);
-        r.add("hiretrack.storage.secret-key", MINIO::getPassword);
+        // S3Mock accepts any credentials, so the application.yml defaults are fine; the service creates the bucket
+        r.add("hiretrack.storage.endpoint", S3::getHttpEndpoint);
     }
 
     private ResponseEntity<JsonNode> paste(long user, String key, String text) {

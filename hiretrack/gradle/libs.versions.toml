@@ -1,0 +1,37 @@
+[versions]
+spring-boot = "4.0.9"
+spring-dependency-management = "1.1.7"
+spring-cloud = "2025.1.4"
+openai = "4.105.0"
+anthropic = "3.8.0"
+resilience4j = "2.3.0"
+shedlock = "6.3.0"
+pdfbox = "3.0.5"
+aws-sdk = "2.31.6"
+wiremock = "3.9.1"
+pact = "4.6.17"
+s3mock = "5.2.3"
+versions-plugin = "0.67.0"
+
+[libraries]
+# Gradle plugins used by build-logic
+spring-boot-gradle-plugin = { module = "org.springframework.boot:spring-boot-gradle-plugin", version.ref = "spring-boot" }
+spring-dependency-management-plugin = { module = "io.spring.gradle:dependency-management-plugin", version.ref = "spring-dependency-management" }
+
+# Third-party libraries (Spring-managed ones need no version)
+openai-java = { module = "com.openai:openai-java", version.ref = "openai" }
+anthropic-java = { module = "com.anthropic:anthropic-java", version.ref = "anthropic" }
+resilience4j-bulkhead = { module = "io.github.resilience4j:resilience4j-bulkhead", version.ref = "resilience4j" }
+resilience4j-circuitbreaker = { module = "io.github.resilience4j:resilience4j-circuitbreaker", version.ref = "resilience4j" }
+shedlock-spring = { module = "net.javacrumbs.shedlock:shedlock-spring", version.ref = "shedlock" }
+shedlock-jdbc = { module = "net.javacrumbs.shedlock:shedlock-provider-jdbc-template", version.ref = "shedlock" }
+pdfbox = { module = "org.apache.pdfbox:pdfbox", version.ref = "pdfbox" }
+aws-sdk-bom = { module = "software.amazon.awssdk:bom", version.ref = "aws-sdk" }
+aws-s3 = { module = "software.amazon.awssdk:s3" }
+wiremock = { module = "org.wiremock:wiremock-standalone", version.ref = "wiremock" }
+pact-consumer = { module = "au.com.dius.pact.consumer:junit5", version.ref = "pact" }
+pact-provider = { module = "au.com.dius.pact.provider:junit5spring", version.ref = "pact" }
+s3mock-testcontainers = { module = "com.adobe.testing:s3mock-testcontainers", version.ref = "s3mock" }
+
+[plugins]
+versions = { id = "io.github.ben-manes.versions", version.ref = "versions-plugin" }

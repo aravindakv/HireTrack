@@ -44,7 +44,7 @@ These were agreed before writing this guide. Change them here first if you chang
 | Messaging | Apache Kafka with the transactional outbox pattern |
 | Services | 8: `api-gateway`, `identity-service`, `resume-service`, `ai-service`, `match-service`, `application-service`, `job-feed-service`, `analytics-service` |
 | Language / framework | Java 25, Spring Boot 4.0.x, Spring Cloud 2025.1 (Oakwood), Jackson 3 |
-| Build | Gradle 9.1.0 (Kotlin DSL), multi-module monorepo with convention plugins |
+| Build | Gradle 9.9.1 (Kotlin DSL), multi-module monorepo with convention plugins |
 | Base package / group | `com.aravindakv.hiretrack` |
 | Data access | Spring Data JPA for domain tables; `JdbcTemplate` for outbox, idempotency and upsert SQL |
 | Database | PostgreSQL 16, one schema and one database user per service |
@@ -59,7 +59,7 @@ These were agreed before writing this guide. Change them here first if you chang
 
 | Item | Convention |
 | --- | --- |
-| Repository root | `hiretrack/`. All paths in this guide are relative to it |
+| Code root | `hiretrack/`, a folder inside the HireTrack repository (next to `docs/`). All paths in this guide are relative to it, and all commands run from it |
 | Java packages | `com.aravindakv.hiretrack.<service>.<layer>`, where layer is `domain`, `service`, `web`, `persistence`, `client`, `config`, `messaging` |
 | Ports (local) | gateway 8080, identity 8081, resume 8082, ai 8083, match 8084, application 8085, job-feed 8086, analytics 8087, WireMock 8089, frontend 5173 |
 | Database schemas | `identity`, `resume`, `ai`, `match`, `application`, `feed`, `analytics` |
@@ -79,7 +79,7 @@ Pinned in `gradle/libs.versions.toml` (Phase 0). These were current when the gui
 | Component | Version |
 | --- | --- |
 | Java | 25 |
-| Gradle | 9.1.0 |
+| Gradle | 9.9.1 |
 | Spring Boot | 4.0.9 |
 | Spring Cloud | 2025.1.4 |
 | OpenAI Java SDK | 4.105.0 |
