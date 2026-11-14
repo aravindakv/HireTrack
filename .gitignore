@@ -1,0 +1,43 @@
+# Build output
+.gradle/
+build/
+out/
+target/
+frontend/dist/
+dist/
+
+# Dependencies
+node_modules/
+
+# IDE and OS files
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Secrets and local configuration (never commit)
+.env
+.env.*
+!.env.example
+deploy/dev-keys/*.pem
+*.pem
+*.key
+
+# Runtime data
+logs/
+*.log
+backups/
+
+# Test and tool output
+e2e/test-results/
+e2e/playwright-report/
+perf/zap-report.html
+contracts/pacts/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
