@@ -1,0 +1,112 @@
+spring:
+  application:
+    name: match-service
+  threads:
+    virtual:
+      enabled: true                      # virtual threads for blocking I/O (JDBC, HTTP calls)
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:hiretrack}
+    username: ${DB_USER:match_svc}
+    password: ${DB_PASSWORD:match_pw}
+    hikari:
+      schema: match                   # search_path for JPA and JdbcTemplate
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none                     # Flyway owns the schema
+    properties:
+      hibernate:
+        default_schema: match
+        jdbc.time_zone: UTC
+  flyway:
+    schemas: match
+    default-schema: match
+    locations: classpath:db/migration,classpath:db/platform/outbox,classpath:db/platform/idempotency
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+    consumer:
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record
+      observation-enabled: true      # consumer continues the trace
+    template:
+      observation-enabled: true      # producer adds trace headers
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          public-key-location: file:${HIRETRACK_KEYS_DIR:../../deploy/dev-keys}/public.pem
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+server:
+  port: 8084
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      service: ${spring.application.name}
+      env: ${HIRETRACK_ENV:local}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLE_RATE:1.0}
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
+
+logging:
+  structured:
+    format:
+      console: ecs                       # JSON logs with traceId/spanId
+  file:
+    name: ${HIRETRACK_LOG_DIR:../../logs}/match-service.log
+  structured.format.file: ecs
+
+hiretrack:
+  internal:
+    token: ${HIRETRACK_INTERNAL_TOKEN:dev-internal-token}
+  kafka:
+    partitions: ${KAFKA_PARTITIONS:3}
+    replicas: ${KAFKA_REPLICAS:1}
+  clients:
+    resume-url: ${RESUME_SERVICE_URL:http://localhost:8082}
+    ai-url: ${AI_SERVICE_URL:http://localhost:8083}
+    resume-timeout: 3s
+    ai-timeout: 15s
+  idempotency:
+    lock-seconds: 30            # longer than the slowest match
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          public-key-location:          # unset the dev key file
+          jwk-set-uri: ${JWKS_URI:http://identity-service/.well-known/jwks.json}
+logging:
+  file:
+    name:                                 # stdout only in Kubernetes

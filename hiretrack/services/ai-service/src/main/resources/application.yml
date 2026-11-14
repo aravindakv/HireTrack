@@ -1,0 +1,125 @@
+spring:
+  application:
+    name: ai-service
+  threads:
+    virtual:
+      enabled: true                      # virtual threads for blocking I/O (JDBC, HTTP calls)
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:hiretrack}
+    username: ${DB_USER:ai_svc}
+    password: ${DB_PASSWORD:ai_pw}
+    hikari:
+      schema: ai                   # search_path for JPA and JdbcTemplate
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none                     # Flyway owns the schema
+    properties:
+      hibernate:
+        default_schema: ai
+        jdbc.time_zone: UTC
+  flyway:
+    schemas: ai
+    default-schema: ai
+    locations: classpath:db/migration
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          public-key-location: file:${HIRETRACK_KEYS_DIR:../../deploy/dev-keys}/public.pem
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+server:
+  port: 8083
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      service: ${spring.application.name}
+      env: ${HIRETRACK_ENV:local}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLE_RATE:1.0}
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
+
+logging:
+  structured:
+    format:
+      console: ecs                       # JSON logs with traceId/spanId
+  file:
+    name: ${HIRETRACK_LOG_DIR:../../logs}/ai-service.log
+  structured.format.file: ecs
+
+hiretrack:
+  internal:
+    token: ${HIRETRACK_INTERNAL_TOKEN:dev-internal-token}
+  kafka:
+    partitions: ${KAFKA_PARTITIONS:3}
+    replicas: ${KAFKA_REPLICAS:1}
+  security:
+    public-paths: []                 # everything here is /internal/**
+  ai:
+    provider: ${AI_PROVIDER:openai}   # openai | anthropic
+    match-timeout: 7s                # per attempt; 2 attempts ≈ 14 s < 15 s SLO
+    match-max-retries: 1
+    feed-timeout: 60s
+    daily-match-quota: 20
+    batch-poll-enabled: true
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+      match-model: ${OPENAI_MODEL:}
+      feed-model: ${OPENAI_FEED_MODEL:}
+    anthropic:
+      api-key: ${ANTHROPIC_API_KEY:}
+      base-url: ${ANTHROPIC_BASE_URL:https://api.anthropic.com}
+      match-model: ${ANTHROPIC_MODEL:}
+      feed-model: ${ANTHROPIC_FEED_MODEL:}
+    # USD per million tokens. Copy current list prices for the models you chose.
+    # batch-discount is the fraction taken off for Batch API requests (e.g. 0.5 = 50% off).
+    # Keep the "[...]" brackets: model IDs often contain dots, which Spring would otherwise drop from map keys.
+    prices:
+      "[<your-openai-match-model>]": {input: 0, cached-input: 0, output: 0, batch-discount: 0}
+      "[<your-openai-feed-model>]": {input: 0, cached-input: 0, output: 0, batch-discount: 0}
+    resilience:
+      max-concurrent-matches: 32     # bulkhead size: match it to your provider rate limit (spec 10.3)
+      breaker-window: 20             # circuit breaker looks at the last 20 calls
+      breaker-failure-rate: 50       # opens at 50% failures...
+      breaker-open-for: 30s          # ...and fails fast for 30 s
+    fake-delay: ${AI_FAKE_DELAY:2s}      # only used when provider = fake
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          public-key-location:          # unset the dev key file
+          jwk-set-uri: ${JWKS_URI:http://identity-service/.well-known/jwks.json}
+logging:
+  file:
+    name:                                 # stdout only in Kubernetes

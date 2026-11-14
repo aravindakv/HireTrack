@@ -12,6 +12,11 @@ java {
 
 repositories { mavenCentral() }
 
+// Gradle 9 no longer adds the JUnit Platform launcher itself. The version comes from the Spring Boot BOM.
+dependencies {
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
 tasks.withType<JavaCompile>().configureEach {
     options.compilerArgs.addAll(listOf("-parameters", "-Xlint:unchecked"))
     options.encoding = "UTF-8"

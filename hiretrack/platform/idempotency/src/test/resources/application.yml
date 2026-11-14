@@ -1,0 +1,8 @@
+spring:
+  flyway:
+    locations: classpath:db/platform/idempotency
+hiretrack:
+  internal:
+    token: test-internal-token
+  idempotency:
+    lock-seconds: 1

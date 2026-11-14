@@ -1,0 +1,8 @@
+management:
+  tracing:
+    export:
+      enabled: false
+logging:
+  structured:
+    format:
+      console:

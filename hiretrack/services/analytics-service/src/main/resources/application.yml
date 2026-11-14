@@ -1,0 +1,103 @@
+spring:
+  application:
+    name: analytics-service
+  threads:
+    virtual:
+      enabled: true                      # virtual threads for blocking I/O (JDBC, HTTP calls)
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:hiretrack}
+    username: ${DB_USER:analytics_svc}
+    password: ${DB_PASSWORD:analytics_pw}
+    hikari:
+      schema: analytics                   # search_path for JPA and JdbcTemplate
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+  flyway:
+    schemas: analytics
+    default-schema: analytics
+    locations: classpath:db/migration,classpath:db/platform/events
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+    consumer:
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      group-id: analytics
+    listener:
+      ack-mode: record
+      observation-enabled: true      # consumer continues the trace
+    template:
+      observation-enabled: true      # producer adds trace headers
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          public-key-location: file:${HIRETRACK_KEYS_DIR:../../deploy/dev-keys}/public.pem
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+server:
+  port: 8087
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      service: ${spring.application.name}
+      env: ${HIRETRACK_ENV:local}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLE_RATE:1.0}
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
+
+logging:
+  structured:
+    format:
+      console: ecs                       # JSON logs with traceId/spanId
+  file:
+    name: ${HIRETRACK_LOG_DIR:../../logs}/analytics-service.log
+  structured.format.file: ecs
+
+hiretrack:
+  internal:
+    token: ${HIRETRACK_INTERNAL_TOKEN:dev-internal-token}
+  kafka:
+    partitions: ${KAFKA_PARTITIONS:3}
+    replicas: ${KAFKA_REPLICAS:1}
+  dashboard:
+    cache-ttl: 30s
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          public-key-location:          # unset the dev key file
+          jwk-set-uri: ${JWKS_URI:http://identity-service/.well-known/jwks.json}
+logging:
+  file:
+    name:                                 # stdout only in Kubernetes

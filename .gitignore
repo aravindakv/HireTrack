@@ -13,6 +13,8 @@ node_modules/
 .idea/
 *.iml
 .vscode/
+# VS Code / Eclipse compiler output
+bin/
 .DS_Store
 Thumbs.db
 

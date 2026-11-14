@@ -61,6 +61,7 @@ dependencies {
     api("org.testcontainers:testcontainers-kafka")
     api("org.springframework.security:spring-security-oauth2-jose")
     api("org.springframework.boot:spring-boot-starter-kafka")
+    api("org.springframework:spring-jdbc")                      // JdbcTemplate in IntegrationTest
     api("org.awaitility:awaitility")
     api("tools.jackson.core:jackson-databind")
     api("org.springframework.boot:spring-boot-resttestclient")   // TestRestTemplate (Spring Boot 4 moved it here)
@@ -173,6 +174,7 @@ public class TestSecurityConfig {
 ```java
 package com.aravindakv.hiretrack.testsupport;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
@@ -199,8 +201,10 @@ public class ContainersConfig {
         return new KafkaContainer("apache/kafka:3.8.0");
     }
 
+    // Only modules with spring-data-redis can connect to it; the others would fail to start.
     @Bean
     @ServiceConnection(name = "redis")
+    @ConditionalOnClass(name = "org.springframework.data.redis.connection.RedisConnectionFactory")
     GenericContainer<?> redis() {
         return new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
     }
@@ -343,6 +347,7 @@ dependencies {
     api("org.springframework.boot:spring-boot-starter-security-oauth2-resource-server")
     api("org.springframework.boot:spring-boot-starter-actuator")
     api("org.springframework.boot:spring-boot-starter-restclient")      // RestClient.Builder for InternalRestClients
+    api("org.springframework:spring-tx")                                // OptimisticLockingFailureException in GlobalExceptionHandler
     api("io.micrometer:micrometer-registry-prometheus")
     api("org.springframework.boot:spring-boot-starter-opentelemetry")   // traces over OTLP
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
@@ -460,11 +465,11 @@ package com.aravindakv.hiretrack.common.web;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
-import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
@@ -532,8 +537,8 @@ public class GlobalExceptionHandler {
         return status(HttpStatus.PAYLOAD_TOO_LARGE, "FILE_TOO_LARGE", "The file is larger than the allowed size.");
     }
 
-    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
-    ResponseEntity<ErrorResponse> optimisticLock(ObjectOptimisticLockingFailureException e) {
+    @ExceptionHandler(OptimisticLockingFailureException.class)       // includes JPA @Version conflicts
+    ResponseEntity<ErrorResponse> optimisticLock(OptimisticLockingFailureException e) {
         return status(HttpStatus.PRECONDITION_FAILED, "PRECONDITION_FAILED",
                 "This record was changed by another request. Reload it and try again.");
     }
@@ -1146,7 +1151,7 @@ plugins { id("hiretrack.library-conventions") }
 dependencies {
     api("org.springframework.boot:spring-boot-starter-jdbc")
     api("org.springframework.boot:spring-boot-starter-kafka")
-    api("tools.jackson.core:jackson-databind")          // Jackson 3 (java.time support is built in)
+    api("org.springframework.boot:spring-boot-starter-jackson")   // Jackson 3 + the ObjectMapper bean (Boot 4 moved its auto-config here)
     implementation("org.springframework.boot:spring-boot-autoconfigure")
 
     testImplementation(project(":platform:test-support"))
@@ -1406,8 +1411,8 @@ class ProcessedEventsIT {
     @Test
     void secondDeliveryOfSameEventIsReportedAsDuplicate() {
         UUID id = UUID.randomUUID();
-        assertThat(tx.execute(s -> processed.markProcessed(id))).isTrue();
-        assertThat(tx.execute(s -> processed.markProcessed(id))).isFalse();
+        assertThat(tx.<Boolean>execute(s -> processed.markProcessed(id))).isTrue();
+        assertThat(tx.<Boolean>execute(s -> processed.markProcessed(id))).isFalse();
     }
 
     @Test
@@ -1417,7 +1422,7 @@ class ProcessedEventsIT {
             processed.markProcessed(id);
             s.setRollbackOnly();               // the handler failed
         });
-        assertThat(tx.execute(s -> processed.markProcessed(id))).isTrue();
+        assertThat(tx.<Boolean>execute(s -> processed.markProcessed(id))).isTrue();
     }
 
     @Test
@@ -1461,6 +1466,7 @@ dependencies {
     implementation("io.micrometer:micrometer-core")
 
     testImplementation(project(":platform:test-support"))
+    testImplementation("org.springframework.boot:spring-boot-starter-micrometer-metrics")   // MeterRegistry bean (services get it via actuator)
     testImplementation("org.springframework.boot:spring-boot-starter-flyway")
     testImplementation("org.flywaydb:flyway-database-postgresql")
     testRuntimeOnly("org.postgresql:postgresql")

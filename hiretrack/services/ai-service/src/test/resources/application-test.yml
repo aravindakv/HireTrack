@@ -1,0 +1,29 @@
+hiretrack:
+  internal:
+    token: test-internal-token
+  outbox:
+    relay-delay-ms: 100
+  ai:
+    provider: openai
+    batch-poll-enabled: false        # tests call the poller directly
+    openai:
+      api-key: test-key
+      match-model: test-match-model
+      feed-model: test-feed-model
+    anthropic:
+      api-key: test-key
+      match-model: test-claude-model
+      feed-model: test-claude-model
+    prices:
+      test-match-model: {input: 2.0, cached-input: 0.5, output: 8.0, batch-discount: 0}
+      test-feed-model: {input: 1.0, cached-input: 0.25, output: 4.0, batch-discount: 0.5}
+logging:
+  structured:
+    format:
+      console:                            # plain logs in test output
+  file:
+    name:
+management:
+  tracing:
+    export:
+      enabled: false

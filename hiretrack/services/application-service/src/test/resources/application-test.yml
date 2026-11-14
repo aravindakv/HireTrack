@@ -1,0 +1,15 @@
+hiretrack:
+  internal:
+    token: test-internal-token
+  outbox:
+    relay-delay-ms: 100
+logging:
+  structured:
+    format:
+      console:                            # plain logs in test output
+  file:
+    name:
+management:
+  tracing:
+    export:
+      enabled: false

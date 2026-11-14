@@ -1,0 +1,6 @@
+spring:
+  flyway:
+    locations: classpath:db/platform/outbox
+hiretrack:
+  outbox:
+    relay-delay-ms: 200

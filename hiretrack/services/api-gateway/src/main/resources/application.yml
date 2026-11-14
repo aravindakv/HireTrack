@@ -1,0 +1,74 @@
+spring:
+  application:
+    name: api-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          public-key-location: file:${HIRETRACK_KEYS_DIR:../../deploy/dev-keys}/public.pem
+
+server:
+  port: 8080
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,gateway
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      service: api-gateway
+      env: ${HIRETRACK_ENV:local}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLE_RATE:1.0}
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
+
+logging:
+  structured:
+    format:
+      console: ecs
+
+hiretrack:
+  gateway:
+    allowed-origins: ${ALLOWED_ORIGINS:http://localhost:5173}
+    routes:
+      identity: ${IDENTITY_URL:http://localhost:8081}
+      resume: ${RESUME_URL:http://localhost:8082}
+      match: ${MATCH_URL:http://localhost:8084}
+      application: ${APPLICATION_URL:http://localhost:8085}
+      feed: ${FEED_URL:http://localhost:8086}
+      analytics: ${ANALYTICS_URL:http://localhost:8087}
+    rate-limit:
+      default-per-second: 20
+      default-burst: 40
+      expensive-per-second: 1      # /matches and /jobs/refresh
+      expensive-burst: 5
+
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          public-key-location:
+          jwk-set-uri: ${JWKS_URI:http://identity-service/.well-known/jwks.json}

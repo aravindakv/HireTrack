@@ -1,0 +1,132 @@
+spring:
+  application:
+    name: job-feed-service
+  threads:
+    virtual:
+      enabled: true                      # virtual threads for blocking I/O (JDBC, HTTP calls)
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:hiretrack}
+    username: ${DB_USER:feed_svc}
+    password: ${DB_PASSWORD:feed_pw}
+    hikari:
+      schema: feed                   # search_path for JPA and JdbcTemplate
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none                     # Flyway owns the schema
+    properties:
+      hibernate:
+        default_schema: feed
+        jdbc.time_zone: UTC
+  flyway:
+    schemas: feed
+    default-schema: feed
+    locations: classpath:db/migration,classpath:db/platform/outbox,classpath:db/platform/events,classpath:db/platform/idempotency
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+    consumer:
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      group-id: job-feed
+    listener:
+      ack-mode: record
+      observation-enabled: true      # consumer continues the trace
+    template:
+      observation-enabled: true      # producer adds trace headers
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          public-key-location: file:${HIRETRACK_KEYS_DIR:../../deploy/dev-keys}/public.pem
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+server:
+  port: 8086
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      service: ${spring.application.name}
+      env: ${HIRETRACK_ENV:local}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLE_RATE:1.0}
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
+
+logging:
+  structured:
+    format:
+      console: ecs                       # JSON logs with traceId/spanId
+  file:
+    name: ${HIRETRACK_LOG_DIR:../../logs}/job-feed-service.log
+  structured.format.file: ecs
+
+hiretrack:
+  internal:
+    token: ${HIRETRACK_INTERNAL_TOKEN:dev-internal-token}
+  kafka:
+    partitions: ${KAFKA_PARTITIONS:3}
+    replicas: ${KAFKA_REPLICAS:1}
+  feed:
+    schedulers-enabled: ${FEED_SCHEDULERS_ENABLED:true}   # feature flag (Phase 14 launch plan)
+    run-hour: 7                                    # 07:00 local
+    jitter-minutes: 60
+    active-days: 14
+    max-results: 50
+    max-remote-results: 25
+    max-days-old: 7
+    top-n: 15
+    manual-refresh-cooldown: 1h
+    submit-batch-size: 500
+    max-score-attempts: 3
+    query-cache-ttl: 6h
+    retention-days: 30
+  adzuna:
+    base-url: ${ADZUNA_BASE_URL:https://api.adzuna.com}
+    app-id: ${ADZUNA_APP_ID:}
+    app-key: ${ADZUNA_APP_KEY:}
+    timeout: 10s
+  clients:
+    resume-url: ${RESUME_SERVICE_URL:http://localhost:8082}
+    ai-url: ${AI_SERVICE_URL:http://localhost:8083}
+    application-url: ${APPLICATION_SERVICE_URL:http://localhost:8085}
+---
+spring:
+  config:
+    activate:
+      on-profile: prod
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          public-key-location:          # unset the dev key file
+          jwk-set-uri: ${JWKS_URI:http://identity-service/.well-known/jwks.json}
+logging:
+  file:
+    name:                                 # stdout only in Kubernetes

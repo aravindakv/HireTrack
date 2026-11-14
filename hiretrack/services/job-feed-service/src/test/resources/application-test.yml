@@ -1,0 +1,20 @@
+hiretrack:
+  internal:
+    token: test-internal-token
+  outbox:
+    relay-delay-ms: 100
+  feed:
+    schedulers-enabled: false        # tests call planner/submitter/poller directly
+  adzuna:
+    app-id: test-id
+    app-key: test-key
+logging:
+  structured:
+    format:
+      console:                            # plain logs in test output
+  file:
+    name:
+management:
+  tracing:
+    export:
+      enabled: false
