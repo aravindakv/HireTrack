@@ -1,0 +1,755 @@
+<title>HireTrack AI Spec</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: sticky section index on the left, one reading column with full-width figures; diagrams are the backbone, prose explains them. */
+:root {
+  --bg: #F4F6F9;
+  --surface: #FFFFFF;
+  --zone: #EBEEF3;
+  --fg: #18202C;
+  --muted: #5A6577;
+  --line: #D7DCE4;
+  --line-strong: #A9B2C0;
+  --accent: #2F55C4;
+  --accent-soft: #E5EBFA;
+  --ext: #8C5A12;
+  --ext-soft: #FBF1E2;
+  --st-w: #6A7383;
+  --st-a: #2F55C4;
+  --st-i: #A86A0C;
+  --st-o: #23845A;
+  --st-r: #BD3A2E;
+  --code-bg: #EDF0F5;
+  --font-display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F141B; --surface: #161D27; --zone: #1B2330; --fg: #E3E8F0; --muted: #98A3B4;
+    --line: #283242; --line-strong: #4A5668; --accent: #84A3FF; --accent-soft: #1D2A48;
+    --ext: #E2AE5C; --ext-soft: #2A2216;
+    --st-w: #9AA3B2; --st-a: #84A3FF; --st-i: #E3A84A; --st-o: #5BC795; --st-r: #F07A6E;
+    --code-bg: #1E2733; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F141B; --surface: #161D27; --zone: #1B2330; --fg: #E3E8F0; --muted: #98A3B4;
+  --line: #283242; --line-strong: #4A5668; --accent: #84A3FF; --accent-soft: #1D2A48;
+  --ext: #E2AE5C; --ext-soft: #2A2216;
+  --st-w: #9AA3B2; --st-a: #84A3FF; --st-i: #E3A84A; --st-o: #5BC795; --st-r: #F07A6E;
+  --code-bg: #1E2733; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font: 15px/1.6 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+a { color: var(--accent); }
+a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+code { font: 0.86em var(--font-mono); background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h2 { font-size: 1.6rem; font-weight: 600; }
+h3 { font-size: 1.1rem; font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+ul, ol { margin: 0; padding-left: 1.2em; max-width: 68ch; }
+li + li { margin-top: 0.3em; }
+
+.shell { max-width: 1240px; margin: 0 auto; display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 48px; padding-block: 40px 80px; }
+.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; font-size: 13.5px; }
+.toc .eyebrow { margin-bottom: 10px; }
+.toc ol { list-style: none; padding: 0; margin: 0; display: grid; gap: 2px; }
+.toc a { display: block; padding: 5px 10px; border-radius: 6px; color: var(--muted); text-decoration: none; }
+.toc a:hover { background: var(--zone); color: var(--fg); }
+main { min-width: 0; display: grid; gap: 64px; }
+
+.eyebrow { font: 600 11.5px var(--font-body); letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+header.intro { display: grid; gap: 18px; }
+header.intro h1 { font-size: clamp(2rem, 4vw, 2.9rem); font-weight: 700; letter-spacing: -0.01em; }
+header.intro h1 span { color: var(--muted); font-weight: 500; }
+.byline { color: var(--muted); font-size: 14px; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.lede { font-size: 1.08rem; max-width: 64ch; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font: 500 12.5px var(--font-mono); padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+
+section { display: grid; gap: 20px; scroll-margin-top: 24px; }
+.sec-head { display: grid; gap: 6px; }
+.trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.trio > div { display: grid; gap: 6px; align-content: start; padding-top: 12px; border-top: 2px solid var(--line); }
+.trio > div:first-child { border-top-color: var(--accent); }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.two > div { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.out li { color: var(--muted); }
+
+.features { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.features > div { background: var(--surface); padding: 18px; display: grid; gap: 8px; align-content: start; }
+.features .num { font: 500 12px var(--font-mono); color: var(--accent); }
+.features ul { font-size: 14px; }
+
+figure { margin: 0; display: grid; gap: 12px; }
+.fig-frame { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px; overflow-x: auto; }
+figcaption { color: var(--muted); font-size: 13.5px; max-width: 75ch; }
+figcaption strong { color: var(--fg); font-weight: 600; }
+
+/* diagram styling */
+.dg { display: block; width: 100%; height: auto; color: var(--muted); }
+.dg-arch { min-width: 620px; max-width: 760px; margin: 0 auto; }
+.dg-pipe { min-width: 800px; }
+.dg-stage { min-width: 740px; max-width: 900px; margin: 0 auto; }
+.dg-er { min-width: 860px; }
+.dg .zone { fill: var(--zone); stroke: var(--line); }
+.dg .box { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.2; }
+.dg .box.hl { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
+.dg .box.ext { fill: var(--ext-soft); stroke: var(--ext); stroke-width: 1.5; }
+.dg .t { fill: var(--fg); font: 600 13px var(--font-body); }
+.dg .s { fill: var(--muted); font: 10.5px var(--font-mono); }
+.dg .lbl { fill: var(--muted); font: 500 11px var(--font-body); }
+.dg .lbl.acc { fill: var(--accent); }
+.dg .zl { fill: var(--muted); font: 600 11px var(--font-body); letter-spacing: 0.08em; }
+.dg .edge { stroke: var(--muted); stroke-width: 1.4; fill: none; }
+.dg .edge.acc { stroke: var(--accent); stroke-width: 1.8; }
+.dg .edge.dash { stroke-dasharray: 5 4; }
+.dg .ah { fill: var(--muted); }
+.dg .ah.acc { fill: var(--accent); }
+.dg .boundary { stroke: var(--ext); stroke-width: 1.4; stroke-dasharray: 2 4; fill: none; }
+.dg .bnd-lbl { fill: var(--ext); font: 600 11px var(--font-body); }
+.dg .st { fill: var(--surface); stroke-width: 2; }
+.dg .st-w { stroke: var(--st-w); } .dg .st-a { stroke: var(--st-a); } .dg .st-i { stroke: var(--st-i); } .dg .st-o { stroke: var(--st-o); } .dg .st-r { stroke: var(--st-r); }
+.dg .stt { font: 600 12.5px var(--font-mono); letter-spacing: 0.04em; }
+.dg .stt-w { fill: var(--st-w); } .dg .stt-a { fill: var(--st-a); } .dg .stt-i { fill: var(--st-i); } .dg .stt-o { fill: var(--st-o); } .dg .stt-r { fill: var(--st-r); }
+.dg .tbl { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.2; }
+.dg .tbl.own { stroke: var(--accent); stroke-width: 2; }
+.dg .th { fill: var(--zone); }
+.dg .th.own { fill: var(--accent-soft); }
+.dg .tn { fill: var(--fg); font: 600 13px var(--font-mono); }
+.dg .col { fill: var(--fg); font: 11.5px var(--font-mono); }
+.dg .tag { fill: var(--muted); font: 10.5px var(--font-mono); }
+.dg .tag.k { fill: var(--accent); font-weight: 500; }
+
+/* data tables */
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+th { font: 600 11.5px var(--font-body); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); background: var(--zone); }
+td.m, td code { white-space: nowrap; }
+td.m { font: 12.5px var(--font-mono); }
+.method { font: 600 11.5px var(--font-mono); color: var(--accent); white-space: nowrap; }
+
+.schema { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 16px; }
+.schema .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; min-width: 0; }
+.schema .card h3 { font: 600 14px var(--font-mono); padding: 10px 14px; background: var(--zone); border-bottom: 1px solid var(--line); }
+.schema table { font-size: 12.5px; }
+.schema td { padding: 6px 14px; }
+.schema td:first-child { font-family: var(--font-mono); white-space: nowrap; }
+.schema td:nth-child(2) { font-family: var(--font-mono); color: var(--muted); white-space: nowrap; font-size: 11.5px; }
+
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.note { border-left: 3px solid var(--line-strong); padding: 4px 0 4px 14px; display: grid; gap: 6px; align-content: start; }
+.note.warn { border-left-color: var(--ext); }
+.note p, .note li { font-size: 14px; }
+
+.milestones { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; max-width: none; counter-reset: ms; }
+.milestones li { margin: 0; counter-increment: ms; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 4px; align-content: start; }
+.milestones li::before { content: "M" counter(ms); font: 600 12px var(--font-mono); color: var(--accent); }
+.milestones b { font-family: var(--font-display); font-weight: 600; }
+.milestones span { color: var(--muted); font-size: 13px; }
+
+@media (max-width: 920px) {
+  .shell { grid-template-columns: minmax(0, 1fr); gap: 28px; padding-block: 24px 56px; }
+  .toc { position: static; }
+  .toc ol { display: flex; flex-wrap: wrap; gap: 6px; }
+  .toc a { border: 1px solid var(--line); background: var(--surface); padding: 4px 10px; }
+  main { gap: 48px; }
+}
+@media (max-width: 640px) {
+  .trio, .two { grid-template-columns: minmax(0, 1fr); }
+  .fig-frame { padding: 12px; }
+  .schema { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<div class="shell">
+  <nav class="toc" aria-label="Sections">
+    <div class="eyebrow">Specification</div>
+    <ol>
+      <li><a href="#overview">Overview</a></li>
+      <li><a href="#scope">Scope</a></li>
+      <li><a href="#features">Features</a></li>
+      <li><a href="#architecture">Architecture</a></li>
+      <li><a href="#job-feed">Daily Job Feed</a></li>
+      <li><a href="#pipeline">Application stages</a></li>
+      <li><a href="#data-model">Data model</a></li>
+      <li><a href="#api">API</a></li>
+      <li><a href="#quality">Security &amp; quality</a></li>
+      <li><a href="#milestones">Milestones</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="intro">
+      <div class="eyebrow">Product &amp; technical specification</div>
+      <h1>HireTrack AI <span>v1</span></h1>
+      <div class="byline"><span>Nov 14, 2026</span><span>Aravinda Karanam</span><span>Built live in class</span></div>
+      <p class="lede">A web app that helps job seekers tailor their resume to each job with AI, find fresh postings near them every morning, and track every application in one place.</p>
+      <div class="chips">
+        <span class="chip">React + Vite</span><span class="chip">FastAPI</span><span class="chip">SQLAlchemy + Alembic</span><span class="chip">SQLite</span><span class="chip">OpenAI API</span><span class="chip">Claude (switchable)</span><span class="chip">Adzuna API</span><span class="chip">JWT + bcrypt</span>
+      </div>
+    </header>
+
+    <section id="overview">
+      <div class="sec-head"><div class="eyebrow">1 · Overview</div><h2>Why it exists</h2></div>
+      <div class="trio">
+        <div><h3>Problem</h3><p>Candidates send the same resume to every job without knowing which skills each posting expects, and track applications across scattered spreadsheets and notes.</p></div>
+        <div><h3>Goal</h3><p>One place to check resume fit for a job, discover new postings nearby, track applications from Wishlist to Offer, and see how the job hunt is going.</p></div>
+        <div><h3>Target user</h3><p>Students and professionals actively applying for jobs.</p></div>
+      </div>
+    </section>
+
+    <section id="scope">
+      <div class="sec-head"><div class="eyebrow">2 · Scope</div><h2>What v1 includes</h2></div>
+      <div class="two">
+        <div>
+          <h3>In scope</h3>
+          <ul>
+            <li>Signup, login and logout</li>
+            <li>Resume upload (PDF) or paste</li>
+            <li>AI Resume Match</li>
+            <li>Application pipeline on a Kanban board</li>
+            <li>Job-hunt dashboard</li>
+            <li>Daily Job Feed from the Adzuna API, ranked against the active resume</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Out of scope</h3>
+          <ul class="out">
+            <li>Social login (Google, LinkedIn)</li>
+            <li>Email or calendar sync</li>
+            <li>Scraping job boards. LinkedIn, Indeed and Glassdoor forbid it and offer no public job-search API</li>
+            <li>Job sources other than Adzuna; auto-applying</li>
+            <li>Cloud deployment</li>
+            <li>Password reset, email verification, account deletion from the UI</li>
+            <li>OCR for scanned PDFs</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="features">
+      <div class="sec-head"><div class="eyebrow">3 · Core features</div><h2>Six features</h2></div>
+      <div class="features">
+        <div><span class="num">3.1</span><h3>Authentication</h3><ul><li>Email and password; emails stored lowercased</li><li>Passwords 8–72 bytes</li><li>Each user sees only their own data</li></ul></div>
+        <div><span class="num">3.2</span><h3>Resume</h3><ul><li>PDF (max 2 MB, text via <code>pypdf</code>) or pasted text, max 20,000 characters</li><li>Immutable: each upload is a new row and becomes active</li><li>Switch back to an older resume any time</li></ul></div>
+        <div><span class="num">3.3</span><h3>AI Resume Match</h3><ul><li>Fit score 0–100, missing skills, 3 tailored bullets</li><li>Company and role read from the posting, confirmed by the user</li><li>Save as a Wishlist application; 20 matches per day</li></ul></div>
+        <div><span class="num">3.4</span><h3>Application pipeline</h3><ul><li>Wishlist → Applied → Interview → Offer, plus Rejected</li><li>Drag between stages; dates set automatically</li><li>Interviews attached to an application</li></ul></div>
+        <div><span class="num">3.5</span><h3>Dashboard</h3><ul><li>Applications by stage</li><li>Interviews this week, Monday to Sunday in the browser's timezone</li><li>Response rate = replied ÷ sent</li></ul></div>
+        <div><span class="num">3.6</span><h3>Daily Job Feed</h3><ul><li>One saved search: keywords, country, city, radius, remote OK</li><li>New postings each morning, quick-scored by the AI provider</li><li>Save to pipeline or dismiss</li></ul></div>
+      </div>
+    </section>
+
+    <section id="architecture">
+      <div class="sec-head"><div class="eyebrow">6 · System architecture</div><h2>Three tiers, one gatekeeper</h2></div>
+      <p>A React single-page app calls a FastAPI REST API over JSON with a JWT. Only the backend reads and writes SQLite and calls the AI provider (OpenAI by default, Claude when switched) and Adzuna, so API keys and the database never reach the browser.</p>
+      <figure>
+        <div class="fig-frame">
+          <svg class="dg dg-arch" viewBox="0 0 700 536" role="img" aria-label="Architecture: the React app calls FastAPI routers with a JWT; services hold the rules and are the only path to the AI client, the jobs client and the models, which in turn are the only parts that reach the AI provider, Adzuna and SQLite.">
+            <defs>
+              <marker id="a-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0 L10 5 L0 10 z"/></marker>
+              <marker id="a-arr-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah acc" d="M0 0 L10 5 L0 10 z"/></marker>
+            </defs>
+            <rect class="zone" x="20" y="40" width="230" height="370" rx="10"/>
+            <text class="zl" x="36" y="64">BROWSER · REACT + VITE</text>
+            <rect class="zone" x="330" y="40" width="350" height="370" rx="10"/>
+            <text class="zl" x="346" y="64">BACKEND · FASTAPI</text>
+
+            <rect class="box" x="45" y="90" width="180" height="56" rx="6"/>
+            <text class="t" x="135" y="114" text-anchor="middle">Pages &amp; components</text>
+            <text class="s" x="135" y="133" text-anchor="middle">Kanban · forms · Job Feed</text>
+            <rect class="box" x="45" y="200" width="180" height="56" rx="6"/>
+            <text class="t" x="135" y="224" text-anchor="middle">API layer</text>
+            <text class="s" x="135" y="243" text-anchor="middle">React Query · JWT header</text>
+            <rect class="box" x="45" y="320" width="180" height="56" rx="6"/>
+            <text class="t" x="135" y="344" text-anchor="middle">AuthContext</text>
+            <text class="s" x="135" y="363" text-anchor="middle">token + current user</text>
+            <line class="edge" x1="135" y1="146" x2="135" y2="198" marker-end="url(#a-arr)"/>
+            <text class="lbl" x="143" y="177">calls</text>
+            <line class="edge" x1="135" y1="320" x2="135" y2="258" marker-end="url(#a-arr)"/>
+            <text class="lbl" x="143" y="294">adds token</text>
+
+            <path class="edge acc" d="M225 228 H290 V118 H353" marker-end="url(#a-arr-acc)"/>
+            <text class="lbl acc" text-anchor="middle" transform="translate(281 172) rotate(-90)">JSON + JWT · /api/v1</text>
+
+            <rect class="box" x="355" y="90" width="150" height="56" rx="6"/>
+            <text class="t" x="430" y="114" text-anchor="middle">Routers</text>
+            <text class="s" x="430" y="133" text-anchor="middle">validate · auth dep</text>
+            <rect class="box" x="515" y="90" width="150" height="56" rx="6"/>
+            <text class="t" x="590" y="114" text-anchor="middle">Scheduler</text>
+            <text class="s" x="590" y="133" text-anchor="middle">07:00 + catch-up</text>
+            <line class="edge" x1="430" y1="146" x2="430" y2="198" marker-end="url(#a-arr)"/>
+            <text class="lbl" x="438" y="177">delegate</text>
+            <line class="edge" x1="590" y1="146" x2="590" y2="198" marker-end="url(#a-arr)"/>
+            <text class="lbl" x="598" y="177">triggers feed run</text>
+
+            <rect class="box hl" x="355" y="200" width="310" height="60" rx="6"/>
+            <text class="t" x="510" y="225" text-anchor="middle">Services</text>
+            <text class="s" x="510" y="244" text-anchor="middle">stage rules · metrics · feed · ownership</text>
+
+            <rect class="box" x="355" y="320" width="96" height="56" rx="6"/>
+            <text class="t" x="403" y="344" text-anchor="middle">AI client</text>
+            <text class="s" x="403" y="363" text-anchor="middle">provider switch</text>
+            <rect class="box" x="462" y="320" width="96" height="56" rx="6"/>
+            <text class="t" x="510" y="344" text-anchor="middle">Jobs client</text>
+            <text class="s" x="510" y="363" text-anchor="middle">httpx</text>
+            <rect class="box" x="569" y="320" width="96" height="56" rx="6"/>
+            <text class="t" x="617" y="344" text-anchor="middle">Models</text>
+            <text class="s" x="617" y="363" text-anchor="middle">SQLAlchemy</text>
+            <line class="edge" x1="403" y1="260" x2="403" y2="318" marker-end="url(#a-arr)"/>
+            <text class="lbl" x="409" y="294">match</text>
+            <line class="edge" x1="510" y1="260" x2="510" y2="318" marker-end="url(#a-arr)"/>
+            <text class="lbl" x="516" y="294">search</text>
+            <line class="edge" x1="617" y1="260" x2="617" y2="318" marker-end="url(#a-arr)"/>
+            <text class="lbl" x="623" y="294">queries</text>
+
+            <line class="boundary" x1="20" y1="432" x2="680" y2="432"/>
+            <text class="bnd-lbl" x="22" y="452">Keys and data stay behind this line</text>
+            <text class="lbl" x="22" y="469">Only the backend crosses it</text>
+
+            <line class="edge" x1="403" y1="376" x2="403" y2="460" marker-end="url(#a-arr)"/>
+            <text class="lbl" x="409" y="400">HTTPS</text>
+            <line class="edge" x1="510" y1="376" x2="510" y2="460" marker-end="url(#a-arr)"/>
+            <text class="lbl" x="516" y="400">HTTPS</text>
+            <line class="edge" x1="617" y1="376" x2="617" y2="460" marker-end="url(#a-arr)"/>
+            <text class="lbl" x="623" y="400">SQL</text>
+
+            <rect class="box ext" x="355" y="462" width="96" height="56" rx="6"/>
+            <text class="t" x="403" y="486" text-anchor="middle">OpenAI API</text>
+            <text class="s" x="403" y="505" text-anchor="middle">or Claude</text>
+            <rect class="box ext" x="462" y="462" width="96" height="56" rx="6"/>
+            <text class="t" x="510" y="486" text-anchor="middle">Adzuna API</text>
+            <text class="s" x="510" y="505" text-anchor="middle">app ID + key</text>
+            <rect class="box ext" x="569" y="462" width="96" height="56" rx="6"/>
+            <text class="t" x="617" y="486" text-anchor="middle">SQLite</text>
+            <text class="s" x="617" y="505" text-anchor="middle">hiretrack.db</text>
+          </svg>
+        </div>
+        <figcaption><strong>Every request funnels through Services.</strong> Routers only validate and delegate, and the scheduler only triggers a feed run. The AI client is the only code that knows which AI provider is in use, and the jobs client the only code that knows about Adzuna, so tests swap both for fakes.</figcaption>
+      </figure>
+      <div class="notes">
+        <div class="note"><h3>AI integration</h3><ul><li>Provider from <code>AI_PROVIDER</code>: <code>openai</code> (default, official <code>openai</code> SDK) or <code>anthropic</code></li><li>Model IDs and prices are placeholders until chosen with the evaluation set</li><li>Strict JSON schema output, then checked again with Pydantic</li><li>12 s timeout, 1 retry: a match finishes within about 15 s</li><li>Resume and posting go in delimited blocks, treated as data, never as instructions</li></ul></div>
+        <div class="note"><h3>Failure handling</h3><ul><li>Refusal, invalid output or exhausted retries → <code>502</code> "try again"; nothing is saved</li><li>Adzuna failure → saved as the run's <code>last_error</code>, shown on the Job Feed tab, retried next run</li></ul></div>
+      </div>
+    </section>
+
+    <section id="job-feed">
+      <div class="sec-head"><div class="eyebrow">3.6 · Daily Job Feed</div><h2>From 75 postings to a ranked shortlist</h2></div>
+      <p>Each user saves one search profile. Every morning the backend fetches new postings near them and ranks them against the active resume, using one AI request per run.</p>
+      <figure>
+        <div class="fig-frame">
+          <svg class="dg dg-pipe" viewBox="0 0 920 186" role="img" aria-label="Job feed pipeline: fetch up to 75 postings from Adzuna, drop ones already seen, keep the top 15 by word overlap with no AI cost, score those 15 in one AI request, store them as NEW, and show them on the Job Feed tab.">
+            <defs>
+              <marker id="p-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah" d="M0 0 L10 5 L0 10 z"/></marker>
+            </defs>
+            <text class="lbl" x="14" y="26">Runs at 07:00 daily · on startup if the last run was over 24 h ago · on “Refresh now” (max once an hour)</text>
+            <line class="edge dash" x1="79" y1="36" x2="79" y2="88" marker-end="url(#p-arr)"/>
+
+            <rect class="box" x="14" y="90" width="130" height="72" rx="6"/>
+            <text class="t" x="79" y="114" text-anchor="middle">Fetch</text>
+            <text class="s" x="79" y="133" text-anchor="middle">Adzuna, 7 days</text>
+            <text class="s" x="79" y="149" text-anchor="middle">city + radius</text>
+
+            <rect class="box" x="166" y="90" width="130" height="72" rx="6"/>
+            <text class="t" x="231" y="114" text-anchor="middle">Skip seen</text>
+            <text class="s" x="231" y="133" text-anchor="middle">same external_id</text>
+            <text class="s" x="231" y="149" text-anchor="middle">incl. dismissed</text>
+
+            <rect class="box" x="318" y="90" width="130" height="72" rx="6"/>
+            <text class="t" x="383" y="114" text-anchor="middle">Pre-filter</text>
+            <text class="s" x="383" y="133" text-anchor="middle">word overlap</text>
+            <text class="s" x="383" y="149" text-anchor="middle">no AI cost</text>
+
+            <rect class="box hl" x="470" y="90" width="130" height="72" rx="6"/>
+            <text class="t" x="535" y="114" text-anchor="middle">Score</text>
+            <text class="s" x="535" y="133" text-anchor="middle">1 AI request</text>
+            <text class="s" x="535" y="149" text-anchor="middle">quick score</text>
+
+            <rect class="box" x="622" y="90" width="130" height="72" rx="6"/>
+            <text class="t" x="687" y="114" text-anchor="middle">Store</text>
+            <text class="s" x="687" y="133" text-anchor="middle">status NEW</text>
+            <text class="s" x="687" y="149" text-anchor="middle">30-day cleanup</text>
+
+            <rect class="box" x="774" y="90" width="130" height="72" rx="6"/>
+            <text class="t" x="839" y="114" text-anchor="middle">Job Feed tab</text>
+            <text class="s" x="839" y="133" text-anchor="middle">Save → Wishlist</text>
+            <text class="s" x="839" y="149" text-anchor="middle">or Dismiss</text>
+
+            <line class="edge" x1="144" y1="132" x2="164" y2="132" marker-end="url(#p-arr)"/>
+            <text class="lbl" x="155" y="122" text-anchor="middle">≤75</text>
+            <line class="edge" x1="296" y1="132" x2="316" y2="132" marker-end="url(#p-arr)"/>
+            <text class="lbl" x="307" y="122" text-anchor="middle">new</text>
+            <line class="edge" x1="448" y1="132" x2="468" y2="132" marker-end="url(#p-arr)"/>
+            <text class="lbl" x="459" y="122" text-anchor="middle">15</text>
+            <line class="edge" x1="600" y1="132" x2="620" y2="132" marker-end="url(#p-arr)"/>
+            <text class="lbl" x="611" y="122" text-anchor="middle">15</text>
+            <line class="edge" x1="752" y1="132" x2="772" y2="132" marker-end="url(#p-arr)"/>
+          </svg>
+        </div>
+        <figcaption><strong>The AI only sees what survives the free steps.</strong> Up to 50 local results, plus 25 country-wide remote results when “Remote OK” is on, go through duplicate removal and a word-overlap pre-filter before the top 15 are scored in a single request.</figcaption>
+      </figure>
+      <div class="notes">
+        <div class="note warn"><h3>Quick score, not a full match</h3><p>Adzuna returns a shortened description, and the app never opens posting pages itself. The feed score is labelled “Quick score”. For a full match, open the posting, paste its description, and run AI Resume Match with company, role and link pre-filled.</p></div>
+        <div class="note"><h3>Runs on your machine</h3><p>There is no cloud deployment, so APScheduler runs inside the backend. A morning missed while the backend was off is caught up the next time it starts.</p></div>
+        <div class="note"><h3>Privacy and terms</h3><p>Only keywords and location go to Adzuna, never the resume. The Job Feed tab shows Adzuna's required attribution and links to each posting on its own site.</p></div>
+      </div>
+    </section>
+
+    <section id="pipeline">
+      <div class="sec-head"><div class="eyebrow">3.4 · Application stages</div><h2>Moves set the dates the dashboard needs</h2></div>
+      <p>Any stage can move to any other, so the Kanban board never blocks a drag. The services layer fills in <code>applied_date</code> and <code>responded_at</code> as cards move, and the response rate is computed from those two dates.</p>
+      <figure>
+        <div class="fig-frame">
+          <svg class="dg dg-stage" viewBox="0 0 880 300" role="img" aria-label="Stage rules: moving from Wishlist to Applied sets applied_date; a reply (Interview, Offer or Rejected after applying) sets responded_at; Wishlist to Rejected is not counted; moving back to Wishlist clears both dates.">
+            <defs>
+              <marker id="s-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah" d="M0 0 L10 5 L0 10 z"/></marker>
+              <marker id="s-arr-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah acc" d="M0 0 L10 5 L0 10 z"/></marker>
+            </defs>
+            <path class="edge dash" d="M860 144 H872 V40 H8 V144 H16" marker-end="url(#s-arr)"/>
+            <text class="lbl" x="440" y="33" text-anchor="middle">Move back to Wishlist: clears applied_date and responded_at</text>
+
+            <path class="edge" d="M260 106 V100 H860 V106"/>
+            <text class="lbl acc" x="560" y="92" text-anchor="middle">Counted as sent: applied_date is set</text>
+
+            <rect class="st st-w" x="20" y="120" width="120" height="48" rx="6"/>
+            <text class="stt stt-w" x="80" y="149" text-anchor="middle">WISHLIST</text>
+            <rect class="st st-a" x="260" y="120" width="120" height="48" rx="6"/>
+            <text class="stt stt-a" x="320" y="149" text-anchor="middle">APPLIED</text>
+            <rect class="st st-i" x="500" y="120" width="120" height="48" rx="6"/>
+            <text class="stt stt-i" x="560" y="149" text-anchor="middle">INTERVIEW</text>
+            <rect class="st st-o" x="740" y="120" width="120" height="48" rx="6"/>
+            <text class="stt stt-o" x="800" y="149" text-anchor="middle">OFFER</text>
+            <rect class="st st-r" x="500" y="236" width="120" height="48" rx="6"/>
+            <text class="stt stt-r" x="560" y="265" text-anchor="middle">REJECTED</text>
+
+            <line class="edge acc" x1="140" y1="144" x2="258" y2="144" marker-end="url(#s-arr-acc)"/>
+            <text class="lbl acc" x="200" y="136" text-anchor="middle">sets applied_date</text>
+            <line class="edge acc" x1="380" y1="144" x2="498" y2="144" marker-end="url(#s-arr-acc)"/>
+            <text class="lbl acc" x="440" y="124" text-anchor="middle">reply received:</text>
+            <text class="lbl acc" x="440" y="137" text-anchor="middle">sets responded_at</text>
+            <line class="edge" x1="620" y1="144" x2="738" y2="144" marker-end="url(#s-arr)"/>
+            <text class="lbl" x="680" y="136" text-anchor="middle">dates kept</text>
+
+            <path class="edge acc" d="M320 168 V256 H498" marker-end="url(#s-arr-acc)"/>
+            <text class="lbl acc" x="328" y="214">reply: sets responded_at</text>
+            <line class="edge" x1="560" y1="168" x2="560" y2="234" marker-end="url(#s-arr)"/>
+            <text class="lbl" x="566" y="205">responded_at already set</text>
+            <path class="edge dash" d="M80 168 V272 H498" marker-end="url(#s-arr)"/>
+            <text class="lbl" x="88" y="266">posting closed: not sent, not counted</text>
+          </svg>
+        </div>
+        <figcaption><strong>Response rate = replied ÷ sent.</strong> Sent means <code>applied_date</code> is set; replied means <code>responded_at</code> is set too. A rejection counts as a reply. An application with no answer stays in Applied. The dashboard shows “—” until something has been sent. Skipping straight from Wishlist to Interview sets both dates at once.</figcaption>
+      </figure>
+    </section>
+
+    <section id="data-model">
+      <div class="sec-head"><div class="eyebrow">7 · Database design</div><h2>Seven tables, all owned by a user</h2></div>
+      <p>Every table except <code>interviews</code> carries a <code>user_id</code>; interviews belong to a user through their application. Times are stored in UTC and the schema is created only through Alembic migrations.</p>
+      <figure>
+        <div class="fig-frame">
+          <svg class="dg dg-er" viewBox="0 0 1020 625" role="img" aria-label="Entity relationships: users own resumes, matches, applications, job postings and one search profile through user_id. Resumes are scored by matches and job postings. A match or a job posting can each become at most one application. Applications have many interviews.">
+            <defs>
+              <marker id="e-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah" d="M0 0 L10 5 L0 10 z"/></marker>
+              <marker id="e-arr-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah acc" d="M0 0 L10 5 L0 10 z"/></marker>
+            </defs>
+
+            <!-- ownership bus -->
+            <line class="edge acc" x1="210" y1="286" x2="240" y2="286"/>
+            <line class="edge acc" x1="240" y1="86" x2="240" y2="545"/>
+            <line class="edge acc" x1="240" y1="86" x2="278" y2="86" marker-end="url(#e-arr-acc)"/>
+            <line class="edge acc" x1="240" y1="280" x2="278" y2="280" marker-end="url(#e-arr-acc)"/>
+            <line class="edge acc" x1="240" y1="545" x2="278" y2="545" marker-end="url(#e-arr-acc)"/>
+            <path class="edge acc" d="M240 196 H379 a6 6 0 0 1 12 0 H538" marker-end="url(#e-arr-acc)"/>
+            <line class="edge acc" x1="240" y1="430" x2="538" y2="430" marker-end="url(#e-arr-acc)"/>
+            <text class="lbl acc" x="259" y="539" text-anchor="middle">0..1</text>
+            <text class="lbl acc" x="115" y="366" text-anchor="middle">1 user → N rows</text>
+            <text class="lbl acc" x="115" y="382" text-anchor="middle">via user_id</text>
+            <text class="lbl acc" x="115" y="398" text-anchor="middle">ON DELETE CASCADE</text>
+
+            <!-- other relationships -->
+            <line class="edge" x1="385" y1="151" x2="385" y2="213" marker-end="url(#e-arr)"/>
+            <text class="lbl" x="393" y="178">1:N</text>
+            <line class="edge" x1="490" y1="300" x2="538" y2="300" marker-end="url(#e-arr)"/>
+            <text class="lbl" x="514" y="292" text-anchor="middle">0..1</text>
+            <line class="edge" x1="645" y1="400" x2="645" y2="332" marker-end="url(#e-arr)"/>
+            <text class="lbl" x="652" y="370">0..1</text>
+            <path class="edge" d="M750 255 H769 a6 6 0 0 1 12 0 H798" marker-end="url(#e-arr)"/>
+            <text class="lbl" x="775" y="274" text-anchor="middle">1:N</text>
+            <path class="edge dash" d="M490 40 H775 V485 H752" marker-end="url(#e-arr)"/>
+            <text class="lbl" x="632" y="32" text-anchor="middle">resume_id · scored against</text>
+
+            <!-- users -->
+            <rect class="tbl own" x="20" y="230" width="190" height="112" rx="6"/>
+            <path class="th own" d="M21 231 H209 V258 H21 Z"/>
+            <text class="tn" x="32" y="249">users</text>
+            <text class="col" x="32" y="276">id</text><text class="tag k" x="198" y="276" text-anchor="end">PK</text>
+            <text class="col" x="32" y="295">email</text><text class="tag" x="198" y="295" text-anchor="end">UQ, lowercase</text>
+            <text class="col" x="32" y="314">password_hash</text><text class="tag" x="198" y="314" text-anchor="end">bcrypt</text>
+            <text class="col" x="32" y="333">name</text>
+
+            <!-- resumes -->
+            <rect class="tbl" x="280" y="20" width="210" height="131" rx="6"/>
+            <path class="th" d="M281 21 H489 V48 H281 Z"/>
+            <text class="tn" x="292" y="39">resumes</text>
+            <text class="col" x="292" y="66">id</text><text class="tag k" x="478" y="66" text-anchor="end">PK</text>
+            <text class="col" x="292" y="85">user_id</text><text class="tag k" x="478" y="85" text-anchor="end">FK</text>
+            <text class="col" x="292" y="104">content</text><text class="tag" x="478" y="104" text-anchor="end">immutable</text>
+            <text class="col" x="292" y="123">source</text><text class="tag" x="478" y="123" text-anchor="end">PDF | PASTE</text>
+            <text class="col" x="292" y="142">is_active</text><text class="tag" x="478" y="142" text-anchor="end">1 per user</text>
+
+            <!-- matches -->
+            <rect class="tbl" x="280" y="215" width="210" height="131" rx="6"/>
+            <path class="th" d="M281 216 H489 V243 H281 Z"/>
+            <text class="tn" x="292" y="234">matches</text>
+            <text class="col" x="292" y="261">id</text><text class="tag k" x="478" y="261" text-anchor="end">PK</text>
+            <text class="col" x="292" y="280">user_id</text><text class="tag k" x="478" y="280" text-anchor="end">FK</text>
+            <text class="col" x="292" y="299">resume_id</text><text class="tag k" x="478" y="299" text-anchor="end">FK</text>
+            <text class="col" x="292" y="318">fit_score</text><text class="tag" x="478" y="318" text-anchor="end">0–100</text>
+            <text class="col" x="292" y="337">company, role</text><text class="tag" x="478" y="337" text-anchor="end">AI-read</text>
+
+            <!-- search_profiles -->
+            <rect class="tbl" x="280" y="480" width="210" height="131" rx="6"/>
+            <path class="th" d="M281 481 H489 V508 H281 Z"/>
+            <text class="tn" x="292" y="499">search_profiles</text>
+            <text class="col" x="292" y="526">id</text><text class="tag k" x="478" y="526" text-anchor="end">PK</text>
+            <text class="col" x="292" y="545">user_id</text><text class="tag k" x="478" y="545" text-anchor="end">FK · UQ</text>
+            <text class="col" x="292" y="564">keywords</text>
+            <text class="col" x="292" y="583">location</text><text class="tag" x="478" y="583" text-anchor="end">+ country</text>
+            <text class="col" x="292" y="602">radius_km</text><text class="tag" x="478" y="602" text-anchor="end">5–100</text>
+
+            <!-- applications -->
+            <rect class="tbl" x="540" y="180" width="210" height="150" rx="6"/>
+            <path class="th" d="M541 181 H749 V208 H541 Z"/>
+            <text class="tn" x="552" y="199">applications</text>
+            <text class="col" x="552" y="226">id</text><text class="tag k" x="738" y="226" text-anchor="end">PK</text>
+            <text class="col" x="552" y="245">user_id</text><text class="tag k" x="738" y="245" text-anchor="end">FK</text>
+            <text class="col" x="552" y="264">match_id</text><text class="tag k" x="738" y="264" text-anchor="end">FK · UQ</text>
+            <text class="col" x="552" y="283">stage</text><text class="tag" x="738" y="283" text-anchor="end">5 values</text>
+            <text class="col" x="552" y="302">applied_date</text><text class="tag" x="738" y="302" text-anchor="end">auto</text>
+            <text class="col" x="552" y="321">responded_at</text><text class="tag" x="738" y="321" text-anchor="end">auto</text>
+
+            <!-- job_postings -->
+            <rect class="tbl" x="540" y="400" width="210" height="169" rx="6"/>
+            <path class="th" d="M541 401 H749 V428 H541 Z"/>
+            <text class="tn" x="552" y="419">job_postings</text>
+            <text class="col" x="552" y="446">id</text><text class="tag k" x="738" y="446" text-anchor="end">PK</text>
+            <text class="col" x="552" y="465">user_id</text><text class="tag k" x="738" y="465" text-anchor="end">FK</text>
+            <text class="col" x="552" y="484">resume_id</text><text class="tag k" x="738" y="484" text-anchor="end">FK</text>
+            <text class="col" x="552" y="503">application_id</text><text class="tag k" x="738" y="503" text-anchor="end">FK · UQ</text>
+            <text class="col" x="552" y="522">external_id</text><text class="tag" x="738" y="522" text-anchor="end">UQ per user</text>
+            <text class="col" x="552" y="541">fit_score</text><text class="tag" x="738" y="541" text-anchor="end">quick</text>
+            <text class="col" x="552" y="560">status</text><text class="tag" x="738" y="560" text-anchor="end">NEW|SAVED|DISMISSED</text>
+
+            <!-- interviews -->
+            <rect class="tbl" x="800" y="210" width="200" height="93" rx="6"/>
+            <path class="th" d="M801 211 H999 V238 H801 Z"/>
+            <text class="tn" x="812" y="229">interviews</text>
+            <text class="col" x="812" y="256">id</text><text class="tag k" x="988" y="256" text-anchor="end">PK</text>
+            <text class="col" x="812" y="275">application_id</text><text class="tag k" x="988" y="275" text-anchor="end">FK</text>
+            <text class="col" x="812" y="294">scheduled_at</text><text class="tag" x="988" y="294" text-anchor="end">UTC</text>
+          </svg>
+        </div>
+        <figcaption><strong>Ownership is the blue bus.</strong> Each table hangs off <code>users</code> through <code>user_id</code>, and deleting a user cascades. A match or a feed posting can each become at most one application (unique foreign keys). The dashed line shows the resume a feed posting was scored against.</figcaption>
+      </figure>
+
+      <div class="notes">
+        <div class="note"><h3>Constraints</h3><ul>
+          <li>One active resume: partial unique index on <code>resumes(user_id) WHERE is_active = 1</code></li>
+          <li><code>UNIQUE</code> on <code>applications.match_id</code> and <code>job_postings.application_id</code></li>
+          <li><code>UNIQUE (user_id, source, external_id)</code> keeps dismissed postings from returning</li>
+          <li><code>CHECK</code> on stage, status, source, fit scores and radius</li>
+        </ul></div>
+        <div class="note"><h3>Ownership rule</h3><ul>
+          <li>Every query filters by the current <code>user_id</code></li>
+          <li>Interviews load through a join to applications</li>
+          <li>Any referenced ID is first loaded with the user filter; not found → <code>404</code>, never <code>403</code></li>
+        </ul></div>
+        <div class="note warn"><h3>SQLite gotchas</h3><ul>
+          <li>Turn on <code>PRAGMA foreign_keys = ON</code> per connection, or cascades are ignored</li>
+          <li>No <code>ON UPDATE</code>: <code>updated_at</code> comes from SQLAlchemy <code>onupdate=</code></li>
+          <li>Foreign keys aren't indexed automatically: index <code>interviews.application_id</code></li>
+        </ul></div>
+      </div>
+
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>When this is deleted</th><th>What happens</th></tr></thead>
+          <tbody>
+            <tr><td>A user (admin/script only)</td><td>Resumes, matches, applications, search profile and job postings are deleted; interviews go with their applications</td></tr>
+            <tr><td>An application</td><td>Its interviews are deleted; a posting saved as it keeps its data with <code>application_id</code> set to NULL</td></tr>
+            <tr><td>A match</td><td>The application saved from it stays; <code>match_id</code> becomes NULL</td></tr>
+            <tr><td>A resume</td><td>Not possible in v1. <code>resume_id</code> foreign keys use <code>NO ACTION</code> so deleting a whole user still works</td></tr>
+            <tr><td>Old <code>NEW</code> / <code>DISMISSED</code> postings</td><td>Removed by the daily run after 30 days; <code>SAVED</code> postings are kept</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Columns</h3>
+      <div class="schema">
+        <div class="card"><h3>users</h3><table><tbody>
+          <tr><td>id</td><td>INTEGER</td><td>Primary key</td></tr>
+          <tr><td>name</td><td>TEXT</td><td>Not null</td></tr>
+          <tr><td>email</td><td>TEXT</td><td>Not null, unique, lowercased</td></tr>
+          <tr><td>password_hash</td><td>TEXT</td><td>Not null, bcrypt</td></tr>
+          <tr><td>created_at</td><td>DATETIME</td><td>Default now</td></tr>
+        </tbody></table></div>
+        <div class="card"><h3>resumes</h3><table><tbody>
+          <tr><td>id</td><td>INTEGER</td><td>Primary key</td></tr>
+          <tr><td>user_id</td><td>INTEGER</td><td>→ users.id, cascade</td></tr>
+          <tr><td>content</td><td>TEXT</td><td>Not null, ≤ 20,000 chars, never updated</td></tr>
+          <tr><td>source</td><td>TEXT</td><td><code>PDF</code> or <code>PASTE</code></td></tr>
+          <tr><td>is_active</td><td>BOOLEAN</td><td>Default false; one per user</td></tr>
+          <tr><td>created_at</td><td>DATETIME</td><td>Default now</td></tr>
+        </tbody></table></div>
+        <div class="card"><h3>matches</h3><table><tbody>
+          <tr><td>id</td><td>INTEGER</td><td>Primary key</td></tr>
+          <tr><td>user_id</td><td>INTEGER</td><td>→ users.id, cascade</td></tr>
+          <tr><td>resume_id</td><td>INTEGER</td><td>→ resumes.id, no action</td></tr>
+          <tr><td>job_description</td><td>TEXT</td><td>Not null, ≤ 20,000 chars</td></tr>
+          <tr><td>company, role</td><td>TEXT</td><td>Nullable; read by the AI</td></tr>
+          <tr><td>fit_score</td><td>INTEGER</td><td>Not null, 0–100</td></tr>
+          <tr><td>missing_skills</td><td>TEXT</td><td>JSON list</td></tr>
+          <tr><td>suggested_bullets</td><td>TEXT</td><td>JSON list of 3</td></tr>
+          <tr><td>created_at</td><td>DATETIME</td><td>Default now</td></tr>
+        </tbody></table></div>
+        <div class="card"><h3>applications</h3><table><tbody>
+          <tr><td>id</td><td>INTEGER</td><td>Primary key</td></tr>
+          <tr><td>user_id</td><td>INTEGER</td><td>→ users.id, cascade</td></tr>
+          <tr><td>match_id</td><td>INTEGER</td><td>→ matches.id, set null; unique</td></tr>
+          <tr><td>company, role</td><td>TEXT</td><td>Not null</td></tr>
+          <tr><td>stage</td><td>TEXT</td><td>5 values, default <code>WISHLIST</code></td></tr>
+          <tr><td>job_url</td><td>TEXT</td><td>Nullable</td></tr>
+          <tr><td>applied_date</td><td>DATE</td><td>Set by stage rules</td></tr>
+          <tr><td>responded_at</td><td>DATETIME</td><td>Set by stage rules</td></tr>
+          <tr><td>notes</td><td>TEXT</td><td>Nullable</td></tr>
+          <tr><td>created_at, updated_at</td><td>DATETIME</td><td>Default now; on change</td></tr>
+        </tbody></table></div>
+        <div class="card"><h3>interviews</h3><table><tbody>
+          <tr><td>id</td><td>INTEGER</td><td>Primary key</td></tr>
+          <tr><td>application_id</td><td>INTEGER</td><td>→ applications.id, cascade</td></tr>
+          <tr><td>scheduled_at</td><td>DATETIME</td><td>Not null, UTC</td></tr>
+          <tr><td>round</td><td>TEXT</td><td>e.g. HR, Technical, Final</td></tr>
+          <tr><td>notes</td><td>TEXT</td><td>Nullable</td></tr>
+        </tbody></table></div>
+        <div class="card"><h3>search_profiles</h3><table><tbody>
+          <tr><td>id</td><td>INTEGER</td><td>Primary key</td></tr>
+          <tr><td>user_id</td><td>INTEGER</td><td>→ users.id, cascade; unique</td></tr>
+          <tr><td>keywords</td><td>TEXT</td><td>1–100 chars</td></tr>
+          <tr><td>country</td><td>TEXT</td><td>Adzuna code, e.g. <code>in</code></td></tr>
+          <tr><td>location</td><td>TEXT</td><td>City or area</td></tr>
+          <tr><td>radius_km</td><td>INTEGER</td><td>5–100, default 25</td></tr>
+          <tr><td>remote_ok, enabled</td><td>BOOLEAN</td><td>Default false / true</td></tr>
+          <tr><td>last_run_at</td><td>DATETIME</td><td>Last finished run</td></tr>
+          <tr><td>last_manual_run_at</td><td>DATETIME</td><td>Refresh limit</td></tr>
+          <tr><td>last_error</td><td>TEXT</td><td>Cleared on success</td></tr>
+        </tbody></table></div>
+        <div class="card"><h3>job_postings</h3><table><tbody>
+          <tr><td>id</td><td>INTEGER</td><td>Primary key</td></tr>
+          <tr><td>user_id</td><td>INTEGER</td><td>→ users.id, cascade</td></tr>
+          <tr><td>resume_id</td><td>INTEGER</td><td>→ resumes.id, no action</td></tr>
+          <tr><td>application_id</td><td>INTEGER</td><td>→ applications.id, set null; unique</td></tr>
+          <tr><td>source, external_id</td><td>TEXT</td><td><code>ADZUNA</code> + its ID</td></tr>
+          <tr><td>title, company, location</td><td>TEXT</td><td>From the source</td></tr>
+          <tr><td>url, snippet</td><td>TEXT</td><td>Link and short description</td></tr>
+          <tr><td>salary_min, salary_max</td><td>INTEGER</td><td>Nullable</td></tr>
+          <tr><td>fit_score</td><td>INTEGER</td><td>Quick score 0–100</td></tr>
+          <tr><td>missing_skills, reason</td><td>TEXT</td><td>JSON list ≤ 5; one sentence</td></tr>
+          <tr><td>status</td><td>TEXT</td><td><code>NEW</code>, <code>SAVED</code>, <code>DISMISSED</code></td></tr>
+          <tr><td>posted_at, fetched_at</td><td>DATETIME</td><td>From source; default now</td></tr>
+        </tbody></table></div>
+      </div>
+    </section>
+
+    <section id="api">
+      <div class="sec-head"><div class="eyebrow">6.1 · API</div><h2>Endpoints under <code>/api/v1</code></h2></div>
+      <p>Every route except signup and login needs a valid JWT. Lists aren't paginated, because one person's job hunt stays small.</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Method</th><th>Path</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td class="method">POST</td><td class="m">/auth/signup · /auth/login</td><td>Create an account or log in; returns a token</td></tr>
+            <tr><td class="method">GET</td><td class="m">/auth/me</td><td>Current user</td></tr>
+            <tr><td class="method">GET · POST</td><td class="m">/resumes</td><td>List resumes; upload a PDF or paste text (becomes active)</td></tr>
+            <tr><td class="method">POST</td><td class="m">/resumes/{id}/activate</td><td>Make an older resume active</td></tr>
+            <tr><td class="method">POST · GET</td><td class="m">/matches · /matches/{id}</td><td>Run a match against the active resume; read past matches</td></tr>
+            <tr><td class="method">GET · POST</td><td class="m">/applications</td><td>List (optional <code>?stage=</code>); create, optionally from <code>match_id</code></td></tr>
+            <tr><td class="method">GET · PATCH · DELETE</td><td class="m">/applications/{id}</td><td>Read, edit (including stage) or delete</td></tr>
+            <tr><td class="method">GET · POST</td><td class="m">/applications/{id}/interviews</td><td>List or add interviews</td></tr>
+            <tr><td class="method">PATCH · DELETE</td><td class="m">/interviews/{id}</td><td>Edit or delete an interview</td></tr>
+            <tr><td class="method">GET</td><td class="m">/dashboard?tz=Asia/Kolkata</td><td>Stage counts, interviews this week, response rate</td></tr>
+            <tr><td class="method">GET · PUT</td><td class="m">/search-profile</td><td>Read or save the Job Feed search</td></tr>
+            <tr><td class="method">GET</td><td class="m">/jobs</td><td>Feed postings (default <code>NEW</code>), best first, plus last run and error</td></tr>
+            <tr><td class="method">POST</td><td class="m">/jobs/refresh</td><td>Run the feed now; <code>429</code> within an hour of the last refresh</td></tr>
+            <tr><td class="method">POST</td><td class="m">/jobs/{id}/save · /jobs/{id}/dismiss</td><td>Create a Wishlist application, or hide the posting</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td class="m">400</td><td>Validation failed</td></tr>
+            <tr><td class="m">401</td><td>Missing or expired token</td></tr>
+            <tr><td class="m">404</td><td>Not found, or belongs to someone else</td></tr>
+            <tr><td class="m">409</td><td>Conflict: no active resume, email already taken</td></tr>
+            <tr><td class="m">429</td><td>Over the match or refresh limit, or too many failed logins</td></tr>
+            <tr><td class="m">502</td><td>The AI call failed; nothing was saved</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Errors share one shape: <code>{"error": {"code": "NO_ACTIVE_RESUME", "message": "Add a resume before running a match."}}</code></p>
+    </section>
+
+    <section id="quality">
+      <div class="sec-head"><div class="eyebrow">4 · Non-functional · 8 · Testing</div><h2>Security, performance, tests</h2></div>
+      <div class="notes">
+        <div class="note"><h3>Security</h3><ul>
+          <li>bcrypt hashes; HS256 JWT signed with <code>JWT_SECRET</code>, valid 24 h</li>
+          <li>Token in <code>localStorage</code>: simple, but never render user or AI text as HTML</li>
+          <li>Logout clears the browser only; a stolen token works until it expires</li>
+          <li>5 failed logins per email per 15 minutes</li>
+          <li>AI provider and Adzuna keys live only in the backend <code>.env</code></li>
+        </ul></div>
+        <div class="note"><h3>Performance and portability</h3><ul>
+          <li>Pages load in about a second; a match returns in under 15 s</li>
+          <li>Feed scoring runs in the background: 60 s timeout, 2 retries</li>
+          <li>UTC timestamps, JSON as TEXT and Alembic migrations make the move to PostgreSQL a URL change plus one migration</li>
+        </ul></div>
+        <div class="note"><h3>Testing</h3><ul>
+          <li>pytest and <code>TestClient</code> on a temporary SQLite file, with fake AI and jobs clients</li>
+          <li>Stage rules, dashboard maths and timezones, constraints</li>
+          <li>User B gets <code>404</code> for every one of user A's IDs</li>
+          <li>AI timeouts, refusals and invalid output; feed duplicates, refresh limit, catch-up, cleanup</li>
+          <li>About 5 real resume/job pairs checked by hand before the demo</li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section id="milestones">
+      <div class="sec-head"><div class="eyebrow">9 · Milestones</div><h2>Build order</h2></div>
+      <ol class="milestones">
+        <li><b>Setup &amp; database</b><span>Alembic, foreign keys pragma, <code>.env</code></span></li>
+        <li><b>Authentication</b><span>Signup, login, rate limit</span></li>
+        <li><b>Resume</b><span>Paste, PDF extraction, active resume</span></li>
+        <li><b>Application pipeline</b><span>Stage rules, Kanban, interviews</span></li>
+        <li><b>AI Resume Match</b><span>AI client, match endpoint, save as Wishlist</span></li>
+        <li><b>Dashboard</b><span>Stage counts, interviews this week, response rate</span></li>
+        <li><b>Daily Job Feed</b><span>Search profile, Adzuna client, scheduler, Job Feed tab</span></li>
+        <li><b>Demo</b><span>Sample data</span></li>
+      </ol>
+    </section>
+  </main>
+</div>
