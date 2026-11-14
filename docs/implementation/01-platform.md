@@ -2454,7 +2454,7 @@ Remove the `flyway.locations` entries for platform modules a service doesn't use
 
 ## Step 1.8 — CI pipeline (GitHub Actions)
 
-`.github/workflows/ci.yml`:
+`.github/workflows/ci.yml`, at the **repository root** (GitHub only reads workflows from there), one level above `hiretrack/`:
 
 ```yaml
 name: ci
@@ -2467,6 +2467,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hiretrack   # gradlew and the build live here, not at the repo root
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -2481,7 +2484,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
-          path: '**/build/reports/tests/test'
+          path: hiretrack/**/build/reports/tests/test   # uses: steps ignore working-directory
 
   dependency-scan:
     runs-on: ubuntu-latest
