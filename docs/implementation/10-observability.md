@@ -427,7 +427,7 @@ for users but the bill is growing.
 3. Tempo: open a slow /matches trace; is the time in ai-service → provider, or before it?
 
 ## Mitigate
-- Provider outage or rate limiting: lower `resilience4j.bulkhead.instances.ai-match.max-concurrent-calls`, or switch
+- Provider outage or rate limiting: lower `hiretrack.ai.resilience.max-concurrent-matches`, or switch
   provider with `AI_PROVIDER=anthropic` (needs that provider's key and models configured) and restart ai-service.
 - Spend spike: lower `hiretrack.ai.daily-match-quota`; pause the feed with `FEED_SCHEDULERS_ENABLED=false` on
   job-feed-service; check the top users by cost:

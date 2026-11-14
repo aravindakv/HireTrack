@@ -26,7 +26,7 @@ dependencies {
     implementation(project(":platform:outbox"))
     implementation(project(":platform:idempotency"))
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
-    implementation("org.flywaydb:flyway-core")
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
 
@@ -39,10 +39,12 @@ dependencies {
 ```java
 package com.aravindakv.hiretrack.match;
 
+import com.aravindakv.hiretrack.common.web.EnableHiretrackSecurity;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
+@EnableHiretrackSecurity
 public class MatchApplication {
     public static void main(String[] args) {
         SpringApplication.run(MatchApplication.class, args);
@@ -169,6 +171,8 @@ public class Match {
 }
 ```
 
+`@JdbcTypeCode(SqlTypes.JSON)` stores the two lists as JSONB through Hibernate's JSON support. With Spring Boot 4, Hibernate 7.2 and Jackson 3 are on the classpath together. If start-up fails with a Hibernate JSON format mapper error, store the lists as `TEXT` and convert them with the injected `ObjectMapper` in the service instead.
+
 `persistence/MatchRepository.java`:
 
 ```java
@@ -195,7 +199,7 @@ package com.aravindakv.hiretrack.match.client;
 
 import com.aravindakv.hiretrack.common.web.ApiException;
 import com.aravindakv.hiretrack.common.web.InternalRestClients;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -264,7 +268,7 @@ import com.aravindakv.hiretrack.match.domain.Match;
 import com.aravindakv.hiretrack.match.persistence.MatchRepository;
 import com.aravindakv.hiretrack.match.web.MatchDtos.MatchResponse;
 import com.aravindakv.hiretrack.outbox.OutboxWriter;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -499,8 +503,8 @@ package com.aravindakv.hiretrack.match;
 
 import com.aravindakv.hiretrack.common.events.EventEnvelope;
 import com.aravindakv.hiretrack.testsupport.IntegrationTest;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -586,7 +590,7 @@ class MatchIT extends IntegrationTest {
                 .withBody("{\"error\":{\"code\":\"NO_ACTIVE_RESUME\",\"message\":\"Add a resume first.\"}}")));
         var res = run(503, newKey(), "job");
         assertThat(res.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-        assertThat(res.getBody().at("/error/code").asText()).isEqualTo("NO_ACTIVE_RESUME");
+        assertThat(res.getBody().at("/error/code").asString()).isEqualTo("NO_ACTIVE_RESUME");
     }
 
     @Test
@@ -597,7 +601,7 @@ class MatchIT extends IntegrationTest {
         String key = newKey();
         var res = run(504, key, "job");
         assertThat(res.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
-        assertThat(res.getBody().at("/error/code").asText()).isEqualTo("AI_UNAVAILABLE");
+        assertThat(res.getBody().at("/error/code").asString()).isEqualTo("AI_UNAVAILABLE");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM matches WHERE user_id = 504", Integer.class)).isZero();
 
         stubs();                                                       // AI recovers
@@ -622,7 +626,7 @@ class MatchIT extends IntegrationTest {
         assertThat(http.exchange("/internal/users/507/matches/" + id, HttpMethod.GET, new HttpEntity<>(internal()), JsonNode.class)
                 .getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(http.exchange("/internal/users/506/matches/" + id, HttpMethod.GET, new HttpEntity<>(internal()), JsonNode.class)
-                .getBody().get("company").asText()).isEqualTo("Acme");
+                .getBody().get("company").asString()).isEqualTo("Acme");
     }
 
     @Test

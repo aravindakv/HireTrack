@@ -21,7 +21,7 @@ AI runs on the **OpenAI API** by default, and Anthropic Claude can be switched o
 
 | | Class build | Production build |
 | --- | --- | --- |
-| Stack | React, FastAPI, SQLite | React, 8 Java 21 / Spring Boot microservices, PostgreSQL, Kafka, Redis |
+| Stack | React, FastAPI, SQLite | React, 8 Java 25 / Spring Boot 4 microservices, PostgreSQL, Kafka, Redis |
 | Runs | One process | Docker Compose at `http://localhost` first ([Phase 12](docs/implementation/12-deploy-local.md)), AWS later ([Phase 13](docs/implementation/13-deploy-aws.md)) |
 
 ## Running the production build locally
@@ -34,4 +34,4 @@ tools/stack-up.sh             # builds and starts everything
 open http://localhost
 ```
 
-You need Docker, JDK 21 and Node 20, and about 16 GB of RAM. See [Phase 0](docs/implementation/00-setup.md) for the full list.
+You need Docker, JDK 25 and Node 20, and about 16 GB of RAM. See [Phase 0](docs/implementation/00-setup.md) for the full list.

@@ -26,7 +26,7 @@ dependencies {
     implementation(project(":platform:outbox"))
     implementation(project(":platform:idempotency"))
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
-    implementation("org.flywaydb:flyway-core")
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.flywaydb:flyway-database-postgresql")
     implementation(libs.pdfbox)
     implementation(platform(libs.aws.sdk.bom))
@@ -34,7 +34,7 @@ dependencies {
     runtimeOnly("org.postgresql:postgresql")
 
     testImplementation(project(":platform:test-support"))
-    testImplementation("org.testcontainers:minio")
+    testImplementation("org.testcontainers:testcontainers-minio")
 }
 ```
 
@@ -43,11 +43,13 @@ dependencies {
 ```java
 package com.aravindakv.hiretrack.resume;
 
+import com.aravindakv.hiretrack.common.web.EnableHiretrackSecurity;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 @SpringBootApplication
+@EnableHiretrackSecurity
 @ConfigurationPropertiesScan
 public class ResumeApplication {
     public static void main(String[] args) {
@@ -389,7 +391,7 @@ import com.aravindakv.hiretrack.resume.config.ResumeProperties;
 import com.aravindakv.hiretrack.resume.domain.Resume;
 import com.aravindakv.hiretrack.resume.persistence.ResumeRepository;
 import com.aravindakv.hiretrack.resume.storage.ResumeStorage;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -575,7 +577,7 @@ import com.aravindakv.hiretrack.resume.service.ResumeService;
 import com.aravindakv.hiretrack.resume.web.ResumeDtos.PasteRequest;
 import com.aravindakv.hiretrack.resume.web.ResumeDtos.ResumeDetail;
 import com.aravindakv.hiretrack.resume.web.ResumeDtos.ResumeSummary;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -815,7 +817,7 @@ class PdfTextExtractorTest {
 package com.aravindakv.hiretrack.resume;
 
 import com.aravindakv.hiretrack.testsupport.IntegrationTest;
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.core.io.ByteArrayResource;
@@ -828,7 +830,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.util.LinkedMultiValueMap;
-import org.testcontainers.containers.MinIOContainer;
+import org.testcontainers.minio.MinIOContainer;
 
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -879,15 +881,15 @@ class ResumeIT extends IntegrationTest {
     void pdfUploadExtractsText() {
         var res = upload(102, newKey(), TestPdfs.withText("Kotlin Gradle Docker"));
         assertThat(res.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-        assertThat(res.getBody().get("content").asText()).isEqualTo("Kotlin Gradle Docker");
-        assertThat(res.getBody().get("source").asText()).isEqualTo("PDF");
+        assertThat(res.getBody().get("content").asString()).isEqualTo("Kotlin Gradle Docker");
+        assertThat(res.getBody().get("source").asString()).isEqualTo("PDF");
     }
 
     @Test
     void scannedPdfGets422() {
         var res = upload(103, newKey(), TestPdfs.blankPage());
         assertThat(res.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
-        assertThat(res.getBody().at("/error/code").asText()).isEqualTo("PDF_HAS_NO_TEXT");
+        assertThat(res.getBody().at("/error/code").asString()).isEqualTo("PDF_HAS_NO_TEXT");
     }
 
     @Test
@@ -911,7 +913,7 @@ class ResumeIT extends IntegrationTest {
     void missingIdempotencyKeyIs400() {
         var res = http.exchange("/resumes", HttpMethod.POST, new HttpEntity<>(Map.of("text", "x"), auth(106)), JsonNode.class);
         assertThat(res.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(res.getBody().at("/error/code").asText()).isEqualTo("IDEMPOTENCY_KEY_REQUIRED");
+        assertThat(res.getBody().at("/error/code").asString()).isEqualTo("IDEMPOTENCY_KEY_REQUIRED");
     }
 
     @Test
@@ -937,11 +939,11 @@ class ResumeIT extends IntegrationTest {
     void internalActiveResumeEndpoint() {
         paste(110, newKey(), "Go Rust");
         var ok = http.exchange("/internal/users/110/active-resume", HttpMethod.GET, new HttpEntity<>(internal()), JsonNode.class);
-        assertThat(ok.getBody().get("content").asText()).isEqualTo("Go Rust");
+        assertThat(ok.getBody().get("content").asString()).isEqualTo("Go Rust");
 
         var none = http.exchange("/internal/users/999/active-resume", HttpMethod.GET, new HttpEntity<>(internal()), JsonNode.class);
         assertThat(none.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(none.getBody().at("/error/code").asText()).isEqualTo("NO_ACTIVE_RESUME");
+        assertThat(none.getBody().at("/error/code").asString()).isEqualTo("NO_ACTIVE_RESUME");
     }
 
     @Test

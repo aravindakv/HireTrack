@@ -56,13 +56,14 @@ plugins { id("hiretrack.library-conventions") }
 dependencies {
     api("org.springframework.boot:spring-boot-starter-test")
     api("org.springframework.boot:spring-boot-testcontainers")
-    api("org.testcontainers:junit-jupiter")
-    api("org.testcontainers:postgresql")
-    api("org.testcontainers:kafka")
+    api("org.testcontainers:testcontainers-junit-jupiter")
+    api("org.testcontainers:testcontainers-postgresql")
+    api("org.testcontainers:testcontainers-kafka")
     api("org.springframework.security:spring-security-oauth2-jose")
-    api("org.springframework.kafka:spring-kafka")
+    api("org.springframework.boot:spring-boot-starter-kafka")
     api("org.awaitility:awaitility")
-    api("com.fasterxml.jackson.core:jackson-databind")
+    api("tools.jackson.core:jackson-databind")
+    api("org.springframework.boot:spring-boot-resttestclient")   // TestRestTemplate (Spring Boot 4 moved it here)
     api(libs.wiremock)
 }
 ```
@@ -176,7 +177,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.kafka.KafkaContainer;
 
 /**
@@ -188,8 +189,8 @@ public class ContainersConfig {
 
     @Bean
     @ServiceConnection
-    PostgreSQLContainer<?> postgres() {
-        return new PostgreSQLContainer<>("postgres:16-alpine");
+    PostgreSQLContainer postgres() {
+        return new PostgreSQLContainer("postgres:16-alpine");
     }
 
     @Bean
@@ -262,18 +263,20 @@ public final class KafkaProbe {
 package com.aravindakv.hiretrack.testsupport;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.kafka.KafkaConnectionDetails;
+import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.testcontainers.kafka.KafkaContainer;
 
 import java.util.UUID;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@AutoConfigureTestRestTemplate          // Spring Boot 4: TestRestTemplate is no longer configured automatically
 @Import({ContainersConfig.class, TestSecurityConfig.class})
 @ActiveProfiles("test")
 public abstract class IntegrationTest {
@@ -282,7 +285,7 @@ public abstract class IntegrationTest {
 
     @Autowired protected TestRestTemplate http;
     @Autowired protected JdbcTemplate jdbc;
-    @Autowired(required = false) private KafkaConnectionDetails kafkaConnectionDetails;
+    @Autowired(required = false) private KafkaContainer kafkaContainer;
 
     protected HttpHeaders auth(long userId) {
         HttpHeaders h = new HttpHeaders();
@@ -309,7 +312,7 @@ public abstract class IntegrationTest {
     }
 
     protected KafkaProbe kafka() {
-        return new KafkaProbe(String.join(",", kafkaConnectionDetails.getBootstrapServers()));
+        return new KafkaProbe(kafkaContainer.getBootstrapServers());
     }
 }
 ```
@@ -334,17 +337,18 @@ Expected: `BUILD SUCCESSFUL`.
 plugins { id("hiretrack.library-conventions") }
 
 dependencies {
-    api("org.springframework.boot:spring-boot-starter-web")
+    api("org.springframework.boot:spring-boot-starter-webmvc")
     api("org.springframework.boot:spring-boot-starter-validation")
     api("org.springframework.boot:spring-boot-starter-security")
-    api("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
+    api("org.springframework.boot:spring-boot-starter-security-oauth2-resource-server")
     api("org.springframework.boot:spring-boot-starter-actuator")
+    api("org.springframework.boot:spring-boot-starter-restclient")      // RestClient.Builder for InternalRestClients
     api("io.micrometer:micrometer-registry-prometheus")
-    api("io.micrometer:micrometer-tracing-bridge-otel")
-    api("io.opentelemetry:opentelemetry-exporter-otlp")
+    api("org.springframework.boot:spring-boot-starter-opentelemetry")   // traces over OTLP
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
 
     testImplementation(project(":platform:test-support"))
+    testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")   // MockMvc
 }
 ```
 
@@ -668,7 +672,7 @@ public class RequestIdFilter extends OncePerRequestFilter {
 ```java
 package com.aravindakv.hiretrack.common.web;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -755,7 +759,7 @@ public record HiretrackWebProperties(Security security, Internal internal) {
 ```java
 package com.aravindakv.hiretrack.common.web;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.http.MediaType;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.access.AccessDeniedHandler;
@@ -785,34 +789,25 @@ final class JsonSecurityHandlers {
 }
 ```
 
-`HiretrackWebAutoConfiguration.java`:
+`HiretrackWebAutoConfiguration.java`. These web beans are applied automatically to every servlet service:
 
 ```java
 package com.aravindakv.hiretrack.common.web;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
-import org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration;
-import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.Ordered;
-import org.springframework.security.config.Customizer;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
-import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.util.StringUtils;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.time.Clock;
 import java.util.List;
 
-@AutoConfiguration(before = {SecurityAutoConfiguration.class, OAuth2ResourceServerAutoConfiguration.class})
+@AutoConfiguration
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @EnableConfigurationProperties(HiretrackWebProperties.class)
 public class HiretrackWebAutoConfiguration {
@@ -845,9 +840,49 @@ public class HiretrackWebAutoConfiguration {
             }
         };
     }
+}
+```
+
+The security filter chain is **not** an auto-configuration. Spring Boot 4 split its auto-configurations into many modules, and ordering ours before Boot's default security would tie this library to Boot's internal class names. Instead each service opts in with one annotation on its main class. Configuration imported this way is processed before every auto-configuration, so Boot's default security chain backs off.
+
+`EnableHiretrackSecurity.java`:
+
+```java
+package com.aravindakv.hiretrack.common.web;
+
+import org.springframework.context.annotation.Import;
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+/** Put on every servlet service's @SpringBootApplication class. */
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Import(HiretrackSecurityConfiguration.class)
+public @interface EnableHiretrackSecurity {}
+```
+
+`HiretrackSecurityConfiguration.java`:
+
+```java
+package com.aravindakv.hiretrack.common.web;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.util.StringUtils;
+import tools.jackson.databind.ObjectMapper;
+
+@Configuration(proxyBeanMethods = false)
+public class HiretrackSecurityConfiguration {
 
     @Bean
-    @ConditionalOnMissingBean(SecurityFilterChain.class)
     SecurityFilterChain hiretrackSecurityFilterChain(HttpSecurity http, HiretrackWebProperties props,
                                                      ObjectMapper json) throws Exception {
         String internalToken = props.internal().token();
@@ -875,6 +910,8 @@ public class HiretrackWebAutoConfiguration {
 }
 ```
 
+Every service's main class from Phase 2 on carries `@EnableHiretrackSecurity` next to `@SpringBootApplication`. api-gateway doesn't: it's a WebFlux app with its own security (Phase 2).
+
 ### Service-to-service HTTP clients
 
 `InternalRestClients.java`:
@@ -882,12 +919,13 @@ public class HiretrackWebAutoConfiguration {
 ```java
 package com.aravindakv.hiretrack.common.web;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
+import tools.jackson.core.JacksonException;
 
 import java.io.IOException;
 import java.net.http.HttpClient;
@@ -932,7 +970,7 @@ public final class InternalRestClients {
         ErrorResponse body = null;
         try {
             body = json.readValue(response.getBody(), ErrorResponse.class);
-        } catch (IOException ignored) {
+        } catch (IOException | JacksonException ignored) {
             // not our error format; fall through
         }
         boolean propagate = status < 500 || status == 502 || status == 503;
@@ -972,6 +1010,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Map;
 
 @SpringBootApplication
+@EnableHiretrackSecurity
 public class WebTestApp {
 
     @RestController
@@ -1019,7 +1058,7 @@ import com.aravindakv.hiretrack.testsupport.TestJwt;
 import com.aravindakv.hiretrack.testsupport.TestSecurityConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
@@ -1106,13 +1145,12 @@ plugins { id("hiretrack.library-conventions") }
 
 dependencies {
     api("org.springframework.boot:spring-boot-starter-jdbc")
-    api("org.springframework.kafka:spring-kafka")
-    api("com.fasterxml.jackson.core:jackson-databind")
-    api("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
+    api("org.springframework.boot:spring-boot-starter-kafka")
+    api("tools.jackson.core:jackson-databind")          // Jackson 3 (java.time support is built in)
     implementation("org.springframework.boot:spring-boot-autoconfigure")
 
     testImplementation(project(":platform:test-support"))
-    testImplementation("org.flywaydb:flyway-core")
+    testImplementation("org.springframework.boot:spring-boot-starter-flyway")
     testImplementation("org.flywaydb:flyway-database-postgresql")
     testRuntimeOnly("org.postgresql:postgresql")
 }
@@ -1170,9 +1208,9 @@ public final class EventTypes {
 ```java
 package com.aravindakv.hiretrack.common.events;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -1202,7 +1240,7 @@ public record EventEnvelope(
     public <T> T payloadAs(Class<T> type, ObjectMapper json) {
         try {
             return json.treeToValue(payload, type);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalArgumentException("Payload of " + this.type + " is not a " + type.getSimpleName(), e);
         }
     }
@@ -1210,7 +1248,7 @@ public record EventEnvelope(
     public static EventEnvelope parse(String value, ObjectMapper json) {
         try {
             return json.readValue(value, EventEnvelope.class);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalArgumentException("Not an EventEnvelope: " + e.getOriginalMessage(), e);
         }
     }
@@ -1218,7 +1256,7 @@ public record EventEnvelope(
     public String toJson(ObjectMapper json) {
         try {
             return json.writeValueAsString(this);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException(e);
         }
     }
@@ -1264,10 +1302,7 @@ package com.aravindakv.hiretrack.common.events;
 
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.jdbc.JdbcTemplateAutoConfiguration;
-import org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -1276,11 +1311,14 @@ import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.util.backoff.FixedBackOff;
 
-@AutoConfiguration(after = {KafkaAutoConfiguration.class, JdbcTemplateAutoConfiguration.class})
+/**
+ * No ordering against Spring Boot's own auto-configurations is needed: these beans only take
+ * JdbcTemplate/KafkaTemplate as constructor arguments, and Spring creates those first.
+ */
+@AutoConfiguration
 public class EventsAutoConfiguration {
 
     @Bean
-    @ConditionalOnBean(JdbcTemplate.class)
     @ConditionalOnMissingBean
     ProcessedEvents processedEvents(JdbcTemplate jdbc) {
         return new ProcessedEvents(jdbc);
@@ -1288,7 +1326,6 @@ public class EventsAutoConfiguration {
 
     /** 3 retries one second apart, then the record goes to <topic>.DLT so the partition keeps moving. */
     @Bean
-    @ConditionalOnBean(KafkaTemplate.class)
     @ConditionalOnMissingBean(CommonErrorHandler.class)
     CommonErrorHandler kafkaErrorHandler(KafkaTemplate<Object, Object> template) {
         DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(template,
@@ -1345,7 +1382,7 @@ spring:
 package com.aravindakv.hiretrack.common.events;
 
 import com.aravindakv.hiretrack.testsupport.ContainersConfig;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -1419,12 +1456,12 @@ plugins { id("hiretrack.library-conventions") }
 dependencies {
     api(project(":platform:common-events"))
     api("org.springframework.boot:spring-boot-starter-jdbc")
-    api("org.springframework.kafka:spring-kafka")
+    api("org.springframework.boot:spring-boot-starter-kafka")
     implementation("org.springframework.boot:spring-boot-autoconfigure")
     implementation("io.micrometer:micrometer-core")
 
     testImplementation(project(":platform:test-support"))
-    testImplementation("org.flywaydb:flyway-core")
+    testImplementation("org.springframework.boot:spring-boot-starter-flyway")
     testImplementation("org.flywaydb:flyway-database-postgresql")
     testRuntimeOnly("org.postgresql:postgresql")
 }
@@ -1472,7 +1509,7 @@ public record OutboxProperties(Boolean enabled, Long relayDelayMs, Integer batch
 package com.aravindakv.hiretrack.outbox;
 
 import com.aravindakv.hiretrack.common.events.EventEnvelope;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -1594,13 +1631,11 @@ public class OutboxRelay {
 ```java
 package com.aravindakv.hiretrack.outbox;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.boot.autoconfigure.jdbc.JdbcTemplateAutoConfiguration;
-import org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -1608,7 +1643,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.transaction.support.TransactionTemplate;
 
-@AutoConfiguration(after = {KafkaAutoConfiguration.class, JdbcTemplateAutoConfiguration.class})
+@AutoConfiguration
 @EnableScheduling
 @EnableConfigurationProperties(OutboxProperties.class)
 public class OutboxAutoConfiguration {
@@ -1674,11 +1709,10 @@ package com.aravindakv.hiretrack.outbox;
 import com.aravindakv.hiretrack.common.events.EventEnvelope;
 import com.aravindakv.hiretrack.testsupport.ContainersConfig;
 import com.aravindakv.hiretrack.testsupport.KafkaProbe;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.kafka.KafkaConnectionDetails;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -1699,7 +1733,7 @@ class OutboxIT {
     @Autowired TransactionTemplate tx;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper json;
-    @Autowired KafkaConnectionDetails kafkaDetails;
+    @Autowired org.testcontainers.kafka.KafkaContainer kafkaContainer;
 
     @Test
     void committedEventIsPublishedWithUserIdAsKey() {
@@ -1729,7 +1763,7 @@ class OutboxIT {
     }
 
     private KafkaProbe probe() {
-        return new KafkaProbe(String.join(",", kafkaDetails.getBootstrapServers()));
+        return new KafkaProbe(kafkaContainer.getBootstrapServers());
     }
 }
 ```
@@ -1757,7 +1791,7 @@ dependencies {
     implementation("io.micrometer:micrometer-core")
 
     testImplementation(project(":platform:test-support"))
-    testImplementation("org.flywaydb:flyway-core")
+    testImplementation("org.springframework.boot:spring-boot-starter-flyway")
     testImplementation("org.flywaydb:flyway-database-postgresql")
     testRuntimeOnly("org.postgresql:postgresql")
 }
@@ -1790,8 +1824,8 @@ Classes in `platform/idempotency/src/main/java/com/aravindakv/hiretrack/idempote
 ```java
 package com.aravindakv.hiretrack.idempotency;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -1811,7 +1845,7 @@ public record IdempotentRequest(String operation, long userId, String key, Strin
             String bodyJson = body == null ? "" : json.writeValueAsString(body);
             return new IdempotentRequest(operation, userId, key,
                     sha256((method + " " + path + "\n" + bodyJson).getBytes(StandardCharsets.UTF_8)));
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalArgumentException(e);
         }
     }
@@ -1858,8 +1892,8 @@ package com.aravindakv.hiretrack.idempotency;
 
 import com.aravindakv.hiretrack.common.web.ApiException;
 import com.aravindakv.hiretrack.common.web.ErrorResponse;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpHeaders;
@@ -2016,7 +2050,7 @@ public class IdempotencyService {
             headers.set(REPLAY_HEADER, "true");
             T body = stored.body() == null ? null : json.readValue(stored.body(), bodyType);
             return ResponseEntity.status(stored.responseStatus()).headers(headers).body(body);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException("Stored idempotent response is unreadable", e);
         }
     }
@@ -2045,7 +2079,7 @@ public class IdempotencyService {
     private String toJson(Object value) {
         try {
             return json.writeValueAsString(value);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException(e);
         }
     }
@@ -2063,17 +2097,16 @@ public class IdempotencyService {
 ```java
 package com.aravindakv.hiretrack.idempotency;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
-import org.springframework.boot.autoconfigure.jdbc.JdbcTemplateAutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.transaction.support.TransactionTemplate;
 
-@AutoConfiguration(after = JdbcTemplateAutoConfiguration.class)
+@AutoConfiguration
 @EnableScheduling
 @EnableConfigurationProperties(IdempotencyProperties.class)
 public class IdempotencyAutoConfiguration {
@@ -2126,7 +2159,7 @@ package com.aravindakv.hiretrack.idempotency;
 import com.aravindakv.hiretrack.common.web.ApiException;
 import com.aravindakv.hiretrack.testsupport.ContainersConfig;
 import com.aravindakv.hiretrack.testsupport.TestSecurityConfig;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -2352,9 +2385,11 @@ management:
   tracing:
     sampling:
       probability: ${TRACING_SAMPLE_RATE:1.0}
-  otlp:
+  opentelemetry:
     tracing:
-      endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
+      export:
+        otlp:
+          endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
 
 logging:
   structured:
@@ -2403,7 +2438,8 @@ logging:
     name:
 management:
   tracing:
-    enabled: false
+    export:
+      enabled: false
 ```
 
 Remove the `flyway.locations` entries for platform modules a service doesn't use (for example a service with no consumers doesn't need `db/platform/events`).
@@ -2430,7 +2466,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '25'
       - uses: gradle/actions/setup-gradle@v4
       - name: Build, unit and integration tests, coverage gate
         run: ./gradlew build --no-daemon

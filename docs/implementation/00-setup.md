@@ -10,8 +10,8 @@
 
 | Tool | Version | Check |
 | --- | --- | --- |
-| JDK (Eclipse Temurin) | 21 | `java -version` → `openjdk version "21...` |
-| Gradle (only to create the wrapper once) | 8.14+ | `gradle --version` |
+| JDK (Eclipse Temurin) | 25 | `java -version` → `openjdk version "25...` |
+| Gradle (only to create the wrapper once) | 9.1.0 | `gradle --version` |
 | Docker Engine + Compose plugin | 24+ / v2 | `docker compose version` |
 | Node.js | 20+ | `node --version` |
 | OpenSSL | 3.x | `openssl version` |
@@ -22,8 +22,8 @@
 On Ubuntu, for example:
 
 ```bash
-sudo apt-get install -y temurin-21-jdk jq curl openssl   # after adding the Adoptium apt repo
-curl -s "https://get.sdkman.io" | bash && sdk install gradle 8.14.3
+sudo apt-get install -y temurin-25-jdk jq curl openssl   # after adding the Adoptium apt repo
+curl -s "https://get.sdkman.io" | bash && sdk install java 25-tem && sdk install gradle 9.1.0
 ```
 
 **Verify**
@@ -34,7 +34,7 @@ docker compose version
 node --version
 ```
 
-Expected: Java 21, Compose v2.x, Node v20 or later.
+Expected: Java 25, Compose v2.x, Node v20 or later.
 
 ---
 
@@ -43,7 +43,7 @@ Expected: Java 21, Compose v2.x, Node v20 or later.
 ```bash
 mkdir hiretrack && cd hiretrack
 git init
-gradle wrapper --gradle-version 8.14.3 --distribution-type bin
+gradle wrapper --gradle-version 9.1.0 --distribution-type bin
 mkdir -p build-logic/src/main/kotlin gradle platform services contracts/events \
          deploy/postgres deploy/wiremock/mappings deploy/wiremock/__files deploy/dev-keys \
          tools frontend perf e2e ai-evals
@@ -96,7 +96,7 @@ HIRETRACK_INTERNAL_TOKEN=dev-internal-token
 ./gradlew --version | grep Gradle
 ```
 
-Expected: `Gradle 8.14.3`.
+Expected: `Gradle 9.1.0`. Gradle 9.1 is the first release that runs and compiles Java 25.
 
 ---
 
@@ -106,9 +106,9 @@ Create `gradle/libs.versions.toml`. Every module reads versions from here, so an
 
 ```toml
 [versions]
-spring-boot = "3.5.7"
+spring-boot = "4.0.9"
 spring-dependency-management = "1.1.7"
-spring-cloud = "2025.0.0"
+spring-cloud = "2025.1.4"
 openai = "4.105.0"
 anthropic = "3.8.0"
 resilience4j = "2.3.0"
@@ -127,7 +127,8 @@ spring-dependency-management-plugin = { module = "io.spring.gradle:dependency-ma
 # Third-party libraries (Spring-managed ones need no version)
 openai-java = { module = "com.openai:openai-java", version.ref = "openai" }
 anthropic-java = { module = "com.anthropic:anthropic-java", version.ref = "anthropic" }
-resilience4j-spring-boot3 = { module = "io.github.resilience4j:resilience4j-spring-boot3", version.ref = "resilience4j" }
+resilience4j-bulkhead = { module = "io.github.resilience4j:resilience4j-bulkhead", version.ref = "resilience4j" }
+resilience4j-circuitbreaker = { module = "io.github.resilience4j:resilience4j-circuitbreaker", version.ref = "resilience4j" }
 shedlock-spring = { module = "net.javacrumbs.shedlock:shedlock-spring", version.ref = "shedlock" }
 shedlock-jdbc = { module = "net.javacrumbs.shedlock:shedlock-provider-jdbc-template", version.ref = "shedlock" }
 pdfbox = { module = "org.apache.pdfbox:pdfbox", version.ref = "pdfbox" }
@@ -187,7 +188,7 @@ group = "com.aravindakv.hiretrack"
 version = "0.1.0-SNAPSHOT"
 
 java {
-    toolchain { languageVersion = JavaLanguageVersion.of(21) }
+    toolchain { languageVersion = JavaLanguageVersion.of(25) }
 }
 
 repositories { mavenCentral() }
@@ -207,6 +208,8 @@ tasks.named<JacocoReport>("jacocoTestReport") {
     reports { xml.required = true; html.required = true }
 }
 ```
+
+If JaCoCo reports `Unsupported class file major version 69`, its bundled version predates Java 25. Pin a newer JaCoCo release in this file with `jacoco { toolVersion = "<a version with Java 25 support>" }`.
 
 `build-logic/src/main/kotlin/hiretrack.library-conventions.gradle.kts`, for `platform/*` libraries:
 

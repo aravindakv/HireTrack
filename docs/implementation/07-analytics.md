@@ -26,7 +26,7 @@ dependencies {
     implementation(project(":platform:common-events"))
     implementation("org.springframework.boot:spring-boot-starter-jdbc")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
-    implementation("org.flywaydb:flyway-core")
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
 
@@ -39,10 +39,12 @@ dependencies {
 ```java
 package com.aravindakv.hiretrack.analytics;
 
+import com.aravindakv.hiretrack.common.web.EnableHiretrackSecurity;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
+@EnableHiretrackSecurity
 public class AnalyticsApplication {
     public static void main(String[] args) {
         SpringApplication.run(AnalyticsApplication.class, args);
@@ -201,8 +203,8 @@ import com.aravindakv.hiretrack.common.events.EventEnvelope;
 import com.aravindakv.hiretrack.common.events.EventTypes;
 import com.aravindakv.hiretrack.common.events.ProcessedEvents;
 import com.aravindakv.hiretrack.common.events.Topics;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
@@ -265,7 +267,7 @@ public class Projector {
                    SET stage = EXCLUDED.stage, applied_date = EXCLUDED.applied_date,
                        responded_at = EXCLUDED.responded_at, version = EXCLUDED.version
                  WHERE app_projection.version < EXCLUDED.version""",
-                p.get("applicationId").asLong(), e.userId(), p.get("stage").asText(),
+                p.get("applicationId").asLong(), e.userId(), p.get("stage").asString(),
                 date(p.get("appliedDate")), timestamp(p.get("respondedAt")), e.aggregateVersion());
     }
 
@@ -299,11 +301,11 @@ public class Projector {
     }
 
     private static Date date(JsonNode n) {
-        return n == null || n.isNull() ? null : Date.valueOf(LocalDate.parse(n.asText()));
+        return n == null || n.isNull() ? null : Date.valueOf(LocalDate.parse(n.asString()));
     }
 
     private static Timestamp timestamp(JsonNode n) {
-        return n == null || n.isNull() ? null : Timestamp.from(Instant.parse(n.asText()));
+        return n == null || n.isNull() ? null : Timestamp.from(Instant.parse(n.asString()));
     }
 }
 ```
@@ -360,8 +362,8 @@ public class DashboardCache {
 package com.aravindakv.hiretrack.analytics.service;
 
 import com.aravindakv.hiretrack.analytics.domain.DashboardMath;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -420,11 +422,11 @@ public class DashboardService {
     }
 
     private String write(Dashboard d) {
-        try { return json.writeValueAsString(d); } catch (JsonProcessingException e) { throw new IllegalStateException(e); }
+        try { return json.writeValueAsString(d); } catch (JacksonException e) { throw new IllegalStateException(e); }
     }
 
     private Dashboard read(String s) {
-        try { return json.readValue(s, Dashboard.class); } catch (JsonProcessingException e) { throw new IllegalStateException(e); }
+        try { return json.readValue(s, Dashboard.class); } catch (JacksonException e) { throw new IllegalStateException(e); }
     }
 }
 ```
@@ -532,8 +534,8 @@ package com.aravindakv.hiretrack.analytics;
 
 import com.aravindakv.hiretrack.common.events.EventEnvelope;
 import com.aravindakv.hiretrack.testsupport.IntegrationTest;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
@@ -641,7 +643,7 @@ class AnalyticsIT extends IntegrationTest {
     void invalidTimezoneIs400() {
         var res = http.exchange("/dashboard?tz=Mars/Base", HttpMethod.GET, new HttpEntity<>(auth(1006)), JsonNode.class);
         assertThat(res.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(res.getBody().at("/error/code").asText()).isEqualTo("INVALID_TIMEZONE");
+        assertThat(res.getBody().at("/error/code").asString()).isEqualTo("INVALID_TIMEZONE");
     }
 
     @Test

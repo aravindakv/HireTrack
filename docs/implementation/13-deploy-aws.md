@@ -579,7 +579,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: '21' }
+        with: { distribution: temurin, java-version: '25' }
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew :services:${{ matrix.service }}:bootJar --no-daemon
       - uses: aws-actions/configure-aws-credentials@v4

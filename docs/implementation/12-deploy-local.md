@@ -25,7 +25,7 @@ The Phase 0 convention plugin already disables the plain jar, so each service bu
 
 ```dockerfile
 # One recipe for all eight services: docker build --build-arg SERVICE=match-service ...
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:25-jre
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl \

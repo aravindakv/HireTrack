@@ -43,8 +43,8 @@ These were agreed before writing this guide. Change them here first if you chang
 | Scale target | Launch 1,000 DAU, design for 10,000 DAU (100,000 registered users) |
 | Messaging | Apache Kafka with the transactional outbox pattern |
 | Services | 8: `api-gateway`, `identity-service`, `resume-service`, `ai-service`, `match-service`, `application-service`, `job-feed-service`, `analytics-service` |
-| Language / framework | Java 21, Spring Boot 3.5.x, Spring Cloud 2025.0 |
-| Build | Gradle (Kotlin DSL), multi-module monorepo with convention plugins |
+| Language / framework | Java 25, Spring Boot 4.0.x, Spring Cloud 2025.1 (Oakwood), Jackson 3 |
+| Build | Gradle 9.1.0 (Kotlin DSL), multi-module monorepo with convention plugins |
 | Base package / group | `com.aravindakv.hiretrack` |
 | Data access | Spring Data JPA for domain tables; `JdbcTemplate` for outbox, idempotency and upsert SQL |
 | Database | PostgreSQL 16, one schema and one database user per service |
@@ -78,9 +78,10 @@ Pinned in `gradle/libs.versions.toml` (Phase 0). These were current when the gui
 
 | Component | Version |
 | --- | --- |
-| Java | 21 |
-| Spring Boot | 3.5.7 |
-| Spring Cloud | 2025.0.0 |
+| Java | 25 |
+| Gradle | 9.1.0 |
+| Spring Boot | 4.0.9 |
+| Spring Cloud | 2025.1.4 |
 | OpenAI Java SDK | 4.105.0 |
 | Anthropic Java SDK (optional provider) | 3.8.0 |
 | Resilience4j | 2.3.0 |
@@ -91,7 +92,23 @@ Pinned in `gradle/libs.versions.toml` (Phase 0). These were current when the gui
 | Pact JVM | 4.6.17 |
 | PostgreSQL / Kafka / Redis images | 16-alpine / apache/kafka 3.8.0 / 7-alpine |
 
-Testcontainers, Flyway, Jackson, Micrometer and the PostgreSQL driver versions come from the Spring Boot BOM.
+Testcontainers (2.x), Flyway, Jackson (3.x), Micrometer and the PostgreSQL driver versions come from the Spring Boot BOM.
+
+**Check before you start:** ShedLock, Pact JVM and the Gradle versions plugin ship their own releases. Make sure the versions in the catalog support **Spring Framework 7 / Spring Boot 4** and **Gradle 9**, and move to a newer release if `./gradlew build` reports an incompatibility.
+
+## Spring Boot 4 notes
+
+The guide is written for Spring Boot 4.0. The differences from Spring Boot 3 that show up in the code:
+
+| Topic | What the guide uses |
+| --- | --- |
+| Starters | Technology starters: `spring-boot-starter-webmvc` (not `-web`), `spring-boot-starter-security-oauth2-resource-server`, `spring-boot-starter-flyway`, `spring-boot-starter-kafka`, `spring-boot-starter-restclient`, `spring-boot-starter-opentelemetry` |
+| Test starters | `spring-boot-starter-webmvc-test` (MockMvc), `spring-boot-starter-webflux-test` (WebTestClient), `spring-boot-resttestclient` (TestRestTemplate, enabled with `@AutoConfigureTestRestTemplate`) |
+| JSON | Jackson 3: packages `tools.jackson.*`; `JacksonException` is unchecked; `JsonNode.asString()` replaces `asText()`. Annotations stay in `com.fasterxml.jackson.annotation`. The OpenAI and Anthropic SDKs bring their own Jackson 2, which lives in different packages and doesn't conflict |
+| Testcontainers 2 | Artifacts `org.testcontainers:testcontainers-<module>`; containers in `org.testcontainers.<module>` (e.g. `org.testcontainers.postgresql.PostgreSQLContainer`) |
+| Tracing | `management.opentelemetry.tracing.export.otlp.endpoint`; `management.tracing.export.enabled` |
+| Security set-up | `@EnableHiretrackSecurity` on each servlet service, instead of ordering an auto-configuration against Spring Boot's internal classes (Phase 1, Step 1.3) |
+| Resilience4j | Core libraries (`resilience4j-bulkhead`, `resilience4j-circuitbreaker`) configured in code, so there's no Spring Boot starter version to match (Phase 5) |
 
 ## When something doesn't compile
 

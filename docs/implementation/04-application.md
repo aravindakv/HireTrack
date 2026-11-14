@@ -31,7 +31,7 @@ dependencies {
     implementation(project(":platform:outbox"))
     implementation(project(":platform:idempotency"))
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
-    implementation("org.flywaydb:flyway-core")
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.flywaydb:flyway-database-postgresql")
     runtimeOnly("org.postgresql:postgresql")
 
@@ -44,11 +44,13 @@ dependencies {
 ```java
 package com.aravindakv.hiretrack.application;
 
+import com.aravindakv.hiretrack.common.web.EnableHiretrackSecurity;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 @SpringBootApplication
+@EnableHiretrackSecurity
 @ConfigurationPropertiesScan
 public class ApplicationServiceApp {
     public static void main(String[] args) {
@@ -511,7 +513,7 @@ public interface InterviewRepository extends JpaRepository<Interview, Long> {
 package com.aravindakv.hiretrack.application.client;
 
 import com.aravindakv.hiretrack.common.web.InternalRestClients;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -551,7 +553,7 @@ import com.aravindakv.hiretrack.application.domain.JobApplication;
 import com.aravindakv.hiretrack.common.events.EventEnvelope;
 import com.aravindakv.hiretrack.common.events.Topics;
 import com.aravindakv.hiretrack.outbox.OutboxWriter;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -886,7 +888,7 @@ import com.aravindakv.hiretrack.application.web.ApplicationDtos.UpdateInterview;
 import com.aravindakv.hiretrack.common.web.CurrentUser;
 import com.aravindakv.hiretrack.idempotency.IdempotencyService;
 import com.aravindakv.hiretrack.idempotency.IdempotentRequest;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -1000,7 +1002,7 @@ import com.aravindakv.hiretrack.application.web.ApplicationDtos.CreateApplicatio
 import com.aravindakv.hiretrack.common.web.ApiException;
 import com.aravindakv.hiretrack.idempotency.IdempotencyService;
 import com.aravindakv.hiretrack.idempotency.IdempotentRequest;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -1097,8 +1099,8 @@ package com.aravindakv.hiretrack.application;
 
 import com.aravindakv.hiretrack.common.events.EventEnvelope;
 import com.aravindakv.hiretrack.testsupport.IntegrationTest;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
@@ -1227,7 +1229,7 @@ class ApplicationIT extends IntegrationTest {
         long id = createManual(209);
         var res = patch(209, id, etag(209, id), Map.of("appliedDate", "2026-11-01"));
         assertThat(res.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(res.getBody().at("/error/code").asText()).isEqualTo("NOT_SENT");
+        assertThat(res.getBody().at("/error/code").asString()).isEqualTo("NOT_SENT");
     }
 
     @Test

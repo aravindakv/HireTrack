@@ -37,7 +37,7 @@ dependencies {
     implementation(project(":platform:idempotency"))
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
-    implementation("org.flywaydb:flyway-core")
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.flywaydb:flyway-database-postgresql")
     implementation(libs.shedlock.spring)
     implementation(libs.shedlock.jdbc)
@@ -52,12 +52,14 @@ dependencies {
 ```java
 package com.aravindakv.hiretrack.feed;
 
+import com.aravindakv.hiretrack.common.web.EnableHiretrackSecurity;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
+@EnableHiretrackSecurity
 @ConfigurationPropertiesScan
 @EnableScheduling
 public class JobFeedApplication {
@@ -601,7 +603,7 @@ import com.aravindakv.hiretrack.common.events.EventEnvelope;
 import com.aravindakv.hiretrack.common.events.EventTypes;
 import com.aravindakv.hiretrack.common.events.ProcessedEvents;
 import com.aravindakv.hiretrack.common.events.Topics;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
@@ -632,7 +634,7 @@ public class UserActivityListener {
         if (!processed.markProcessed(e.eventId())) return;
         if (!EventTypes.USER_SEEN.equals(e.type()) && !EventTypes.USER_REGISTERED.equals(e.type())) return;
         LocalDate day = e.payload().hasNonNull("seenOn")
-                ? LocalDate.parse(e.payload().get("seenOn").asText())
+                ? LocalDate.parse(e.payload().get("seenOn").asString())
                 : e.occurredAt().atZone(ZoneOffset.UTC).toLocalDate();
         jdbc.update("""
                 INSERT INTO user_activity (user_id, last_seen_on) VALUES (?, ?)
@@ -650,7 +652,7 @@ public class UserActivityListener {
 package com.aravindakv.hiretrack.feed.client;
 
 import com.aravindakv.hiretrack.feed.config.FeedProperties;
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
@@ -716,16 +718,16 @@ public class AdzunaClient {
         List<AdzunaPosting> out = new ArrayList<>();
         if (body == null) return out;
         for (JsonNode r : body.path("results")) {
-            String id = r.path("id").asText(null);
-            String url = r.path("redirect_url").asText(null);
+            String id = r.path("id").asString(null);
+            String url = r.path("redirect_url").asString(null);
             if (id == null || url == null) continue;
-            out.add(new AdzunaPosting(id, r.path("title").asText("").trim(),
-                    r.path("company").path("display_name").asText(null),
-                    r.path("location").path("display_name").asText(null), url,
-                    r.path("description").asText("").trim(),
+            out.add(new AdzunaPosting(id, r.path("title").asString("").trim(),
+                    r.path("company").path("display_name").asString(null),
+                    r.path("location").path("display_name").asString(null), url,
+                    r.path("description").asString("").trim(),
                     r.hasNonNull("salary_min") ? r.get("salary_min").asInt() : null,
                     r.hasNonNull("salary_max") ? r.get("salary_max").asInt() : null,
-                    r.hasNonNull("created") ? Instant.parse(r.get("created").asText()) : null));
+                    r.hasNonNull("created") ? Instant.parse(r.get("created").asString()) : null));
         }
         return out;
     }
@@ -747,8 +749,8 @@ public class AdzunaClient {
 package com.aravindakv.hiretrack.feed.client;
 
 import com.aravindakv.hiretrack.common.web.InternalRestClients;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -784,7 +786,7 @@ public class ServiceClients {
     public String submitBatch(String submissionId, List<ScoreItem> items) {
         JsonNode res = ai.post().uri("/internal/feed-batches")
                 .body(Map.of("submissionId", submissionId, "items", items)).retrieve().body(JsonNode.class);
-        return res.get("batchId").asText();
+        return res.get("batchId").asString();
     }
 
     public JsonNode batch(String batchId) {
@@ -810,8 +812,8 @@ import com.aravindakv.hiretrack.feed.client.AdzunaClient;
 import com.aravindakv.hiretrack.feed.client.AdzunaClient.AdzunaPosting;
 import com.aravindakv.hiretrack.feed.config.FeedProperties;
 import com.aravindakv.hiretrack.feed.domain.SearchProfile;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
@@ -913,7 +915,7 @@ import com.aravindakv.hiretrack.common.events.EventEnvelope;
 import com.aravindakv.hiretrack.common.events.EventTypes;
 import com.aravindakv.hiretrack.common.events.Topics;
 import com.aravindakv.hiretrack.outbox.OutboxWriter;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -1043,7 +1045,7 @@ import com.aravindakv.hiretrack.feed.config.FeedProperties;
 import com.aravindakv.hiretrack.feed.domain.Prefilter;
 import com.aravindakv.hiretrack.feed.domain.SearchProfile;
 import com.aravindakv.hiretrack.feed.persistence.SearchProfileRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -1099,7 +1101,7 @@ public class FeedWorker {
     @KafkaListener(topics = Topics.FEED_COMMANDS, groupId = "job-feed-workers")
     public void on(String value) {
         EventEnvelope e = EventEnvelope.parse(value, json);
-        UUID runId = UUID.fromString(e.payload().get("runId").asText());
+        UUID runId = UUID.fromString(e.payload().get("runId").asString());
         Run run = jdbc.query("SELECT id, user_id, trigger, status FROM feed_runs WHERE id = ?",
                 rs -> rs.next() ? new Run(runId, rs.getLong("user_id"), rs.getString("trigger"), rs.getString("status")) : null,
                 runId);
@@ -1266,7 +1268,7 @@ package com.aravindakv.hiretrack.feed.service;
 
 import com.aravindakv.hiretrack.feed.client.ServiceClients;
 import com.aravindakv.hiretrack.feed.config.FeedProperties;
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -1306,7 +1308,7 @@ public class BatchPoller {
         for (String batchId : batches) {
             try {
                 JsonNode view = clients.batch(batchId);
-                String status = view.path("status").asText();
+                String status = view.path("status").asString();
                 if (!"ENDED".equals(status) && !"FAILED".equals(status)) continue;
                 tx.executeWithoutResult(s -> view.path("items").forEach(this::apply));
             } catch (RuntimeException e) {
@@ -1317,21 +1319,21 @@ public class BatchPoller {
 
     /** Applying the same result twice is harmless: only PENDING items and SCORING runs are updated. */
     private void apply(JsonNode item) {
-        UUID runId = UUID.fromString(item.path("customId").asText());
+        UUID runId = UUID.fromString(item.path("customId").asString());
         Map<String, Object> run = jdbc.queryForList(
                 "SELECT user_id, trigger, attempts, status FROM feed_runs WHERE id = ?", runId).stream().findFirst().orElse(null);
         if (run == null || !"SCORING".equals(run.get("status"))) return;
         long userId = ((Number) run.get("user_id")).longValue();
         String trigger = (String) run.get("trigger");
 
-        if ("SUCCEEDED".equals(item.path("status").asText())) {
+        if ("SUCCEEDED".equals(item.path("status").asString())) {
             int scored = 0;
             for (JsonNode s : item.path("scores")) {
                 scored += jdbc.update("""
                         UPDATE feed_items SET fit_score = ?, missing_skills = ?::jsonb, reason = ?, status = 'NEW'
                         WHERE run_id = ? AND posting_id = ? AND status = 'PENDING'""",
-                        s.path("fitScore").asInt(), s.path("missingSkills").toString(), s.path("reason").asText(),
-                        runId, Long.parseLong(s.path("postingId").asText()));
+                        s.path("fitScore").asInt(), s.path("missingSkills").toString(), s.path("reason").asString(),
+                        runId, Long.parseLong(s.path("postingId").asString()));
             }
             jdbc.update("UPDATE feed_items SET status = 'FILTERED' WHERE run_id = ? AND status = 'PENDING'", runId);
             meters.counter("hiretrack.feed.postings", "stage", "scored").increment(scored);
@@ -1456,7 +1458,7 @@ import com.aravindakv.hiretrack.feed.config.FeedProperties;
 import com.aravindakv.hiretrack.feed.service.FeedRuns;
 import com.aravindakv.hiretrack.idempotency.IdempotencyService;
 import com.aravindakv.hiretrack.idempotency.IdempotentRequest;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -1677,7 +1679,7 @@ import com.aravindakv.hiretrack.feed.service.BatchPoller;
 import com.aravindakv.hiretrack.feed.service.BatchSubmitter;
 import com.aravindakv.hiretrack.feed.service.FeedPlanner;
 import com.aravindakv.hiretrack.testsupport.IntegrationTest;
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -1785,7 +1787,7 @@ class JobFeedIT extends IntegrationTest {
         JsonNode feed = http.exchange("/jobs", HttpMethod.GET, new HttpEntity<>(auth(1101)), JsonNode.class).getBody();
         assertThat(feed.get("items")).hasSize(1);
         assertThat(feed.get("items").get(0).get("quickScore").asInt()).isEqualTo(88);
-        assertThat(feed.get("latestRunStatus").asText()).isEqualTo("DONE");
+        assertThat(feed.get("latestRunStatus").asString()).isEqualTo("DONE");
     }
 
     @Test
@@ -1843,7 +1845,7 @@ class JobFeedIT extends IntegrationTest {
                 .getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
         var second = http.exchange("/jobs/refresh", HttpMethod.POST, new HttpEntity<>(authWithKey(1107, newKey())), JsonNode.class);
         assertThat(second.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
-        assertThat(second.getBody().at("/error/code").asText()).isEqualTo("REFRESH_TOO_SOON");
+        assertThat(second.getBody().at("/error/code").asString()).isEqualTo("REFRESH_TOO_SOON");
     }
 
     @Test
@@ -1901,7 +1903,7 @@ TOKEN=$(tools/mint-jwt.sh 1200); H=(-H "Authorization: Bearer $TOKEN" -H 'Conten
 psql_feed() { docker compose -f deploy/docker-compose.yml exec -T postgres psql "postgresql://feed_svc:feed_pw@localhost/hiretrack" -tAc "$1"; }
 
 curl -s -X POST localhost:8082/resumes "${H[@]}" -H "Idempotency-Key: $(uuidgen)" \
-  -d '{"text":"Backend engineer: Java 21, Spring Boot, Kafka, PostgreSQL, Docker, AWS. 6 years."}' >/dev/null
+  -d '{"text":"Backend engineer: Java 25, Spring Boot, Kafka, PostgreSQL, Docker, AWS. 6 years."}' >/dev/null
 curl -s -X PUT localhost:8086/search-profile "${H[@]}" \
   -d '{"keywords":"java developer","country":"in","location":"Bangalore","radiusKm":25,"remoteOk":true,"enabled":true,"timezone":"Asia/Kolkata"}' >/dev/null
 curl -s -X POST localhost:8086/jobs/refresh "${H[@]}" -H "Idempotency-Key: $(uuidgen)" >/dev/null

@@ -48,7 +48,7 @@ import au.com.dius.pact.consumer.junit5.PactTestFor;
 import au.com.dius.pact.core.model.RequestResponsePact;
 import au.com.dius.pact.core.model.annotations.Pact;
 import com.aravindakv.hiretrack.match.client.Clients;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.web.client.RestClient;
@@ -104,7 +104,7 @@ class AiServicePactTest {
     }
 
     private Clients clients(MockServer server) {
-        return new Clients(RestClient.builder(), new ObjectMapper(), "test-internal-token",
+        return new Clients(RestClient.builder(), JsonMapper.builder().build(), "test-internal-token",
                 server.getUrl(), server.getUrl(), Duration.ofSeconds(3), Duration.ofSeconds(3));
     }
 
@@ -232,8 +232,8 @@ import au.com.dius.pact.core.model.annotations.Pact;
 import au.com.dius.pact.core.model.messaging.Message;
 import au.com.dius.pact.core.model.messaging.MessagePact;
 import com.aravindakv.hiretrack.common.events.EventEnvelope;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -266,9 +266,9 @@ class ApplicationEventsPactTest {
 
     @Test
     void analyticsCanParseIt(List<Message> messages) {
-        ObjectMapper json = new ObjectMapper().registerModule(new JavaTimeModule());
+        ObjectMapper json = JsonMapper.builder().build();          // Jackson 3 handles java.time itself
         EventEnvelope e = EventEnvelope.parse(messages.get(0).contentsAsString(), json);
-        assertThat(e.payload().get("stage").asText()).isNotBlank();
+        assertThat(e.payload().get("stage").asString()).isNotBlank();
         assertThat(e.aggregateVersion()).isPositive();
     }
 }
@@ -495,7 +495,7 @@ void circuitOpensAfterRepeatedProviderFailuresAndFailsFast() {
     for (int i = 0; i < 12; i++) match(320, "cb-" + UUID.randomUUID());
     openai.resetRequests();
     var res = match(320, "cb-" + UUID.randomUUID());
-    assertThat(res.getBody().at("/error/code").asText()).isEqualTo("AI_UNAVAILABLE");
+    assertThat(res.getBody().at("/error/code").asString()).isEqualTo("AI_UNAVAILABLE");
     openai.verify(0, postRequestedFor(urlEqualTo("/v1/chat/completions")));   // didn't even try
 }
 ```
@@ -597,8 +597,8 @@ plugins {
     application
 }
 dependencies {
-    implementation(platform("org.springframework.boot:spring-boot-dependencies:3.5.7"))
-    implementation("com.fasterxml.jackson.core:jackson-databind")
+    implementation(platform("org.springframework.boot:spring-boot-dependencies:4.0.9"))
+    implementation("tools.jackson.core:jackson-databind")
 }
 application { mainClass = "com.aravindakv.hiretrack.evals.RunEvals" }
 ```
@@ -608,8 +608,9 @@ application { mainClass = "com.aravindakv.hiretrack.evals.RunEvals" }
 ```java
 package com.aravindakv.hiretrack.evals;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -635,7 +636,7 @@ public class RunEvals {
         Path cases = Path.of(args.length > 0 ? args[0] : "ai-evals/cases.jsonl");
         String base = args.length > 1 ? args[1] : "http://localhost:8083";
         String token = args.length > 2 ? args[2] : "dev-internal-token";
-        ObjectMapper json = new ObjectMapper();
+        ObjectMapper json = JsonMapper.builder().build();
         HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
         int total = 0, valid = 0, inBand = 0, entityOk = 0, mentionOk = 0;
@@ -646,25 +647,25 @@ public class RunEvals {
             JsonNode c = json.readTree(line);
             total++;
             String body = json.writeValueAsString(Map.of("userId", 999_999, "requestId", "eval-" + UUID.randomUUID(),
-                    "resumeText", c.get("resume").asText(), "jobDescription", c.get("job").asText()));
+                    "resumeText", c.get("resume").asString(), "jobDescription", c.get("job").asString()));
             long start = System.currentTimeMillis();
             HttpResponse<String> res = http.send(HttpRequest.newBuilder(URI.create(base + "/internal/match"))
                     .timeout(Duration.ofSeconds(30)).header("Content-Type", "application/json")
                     .header("X-Internal-Token", token).POST(HttpRequest.BodyPublishers.ofString(body)).build(),
                     HttpResponse.BodyHandlers.ofString());
             totalMillis += System.currentTimeMillis() - start;
-            if (res.statusCode() != 200) { failures.add(c.get("id").asText() + ": HTTP " + res.statusCode()); continue; }
+            if (res.statusCode() != 200) { failures.add(c.get("id").asString() + ": HTTP " + res.statusCode()); continue; }
             JsonNode r = json.readTree(res.body());
             valid++;
             int score = r.get("fitScore").asInt();
             if (score >= c.get("scoreMin").asInt() && score <= c.get("scoreMax").asInt()) inBand++;
-            else failures.add(c.get("id").asText() + ": score " + score + " outside " + c.get("scoreMin") + "-" + c.get("scoreMax"));
-            if (r.get("company").asText().equalsIgnoreCase(c.get("company").asText())
-                    && r.get("role").asText().equalsIgnoreCase(c.get("role").asText())) entityOk++;
-            else failures.add(c.get("id").asText() + ": company/role " + r.get("company") + "/" + r.get("role"));
+            else failures.add(c.get("id").asString() + ": score " + score + " outside " + c.get("scoreMin") + "-" + c.get("scoreMax"));
+            if (r.get("company").asString().equalsIgnoreCase(c.get("company").asString())
+                    && r.get("role").asString().equalsIgnoreCase(c.get("role").asString())) entityOk++;
+            else failures.add(c.get("id").asString() + ": company/role " + r.get("company") + "/" + r.get("role"));
             String skills = r.get("missingSkills").toString().toLowerCase();
             boolean allFound = true;
-            for (JsonNode m : c.get("mustMention")) allFound &= skills.contains(m.asText().toLowerCase());
+            for (JsonNode m : c.get("mustMention")) allFound &= skills.contains(m.asString().toLowerCase());
             if (allFound) mentionOk++;
         }
         double schema = pct(valid, total), band = pct(inBand, total), entity = pct(entityOk, total), mention = pct(mentionOk, total);
@@ -735,7 +736,7 @@ Extend `.github/workflows/ci.yml`:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: '21' }
+        with: { distribution: temurin, java-version: '25' }
       - uses: gradle/actions/setup-gradle@v4
       - name: Consumer tests (write pacts), then provider verification
         run: |
@@ -769,7 +770,7 @@ Extend `.github/workflows/ci.yml`:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
-        with: { distribution: temurin, java-version: '21' }
+        with: { distribution: temurin, java-version: '25' }
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew :services:${{ matrix.service }}:bootJar --no-daemon
       - run: docker build -f deploy/docker/Dockerfile.service --build-arg SERVICE=${{ matrix.service }} -t hiretrack/${{ matrix.service }}:ci .

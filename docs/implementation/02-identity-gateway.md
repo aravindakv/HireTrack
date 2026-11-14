@@ -31,7 +31,7 @@ dependencies {
     implementation(project(":platform:outbox"))
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
-    implementation("org.flywaydb:flyway-core")
+    implementation("org.springframework.boot:spring-boot-starter-flyway")
     implementation("org.flywaydb:flyway-database-postgresql")
     implementation("org.springframework.security:spring-security-crypto")
     runtimeOnly("org.postgresql:postgresql")
@@ -45,11 +45,13 @@ dependencies {
 ```java
 package com.aravindakv.hiretrack.identity;
 
+import com.aravindakv.hiretrack.common.web.EnableHiretrackSecurity;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 @SpringBootApplication
+@EnableHiretrackSecurity
 @ConfigurationPropertiesScan
 public class IdentityApplication {
     public static void main(String[] args) {
@@ -594,7 +596,7 @@ import com.aravindakv.hiretrack.identity.domain.User;
 import com.aravindakv.hiretrack.identity.persistence.RefreshTokenRepository;
 import com.aravindakv.hiretrack.identity.persistence.UserRepository;
 import com.aravindakv.hiretrack.outbox.OutboxWriter;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -1000,8 +1002,8 @@ package com.aravindakv.hiretrack.identity;
 
 import com.aravindakv.hiretrack.common.events.EventEnvelope;
 import com.aravindakv.hiretrack.testsupport.IntegrationTest;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
@@ -1047,11 +1049,11 @@ class AuthFlowIT extends IntegrationTest {
         assertThat(signup.getHeaders().getFirst(HttpHeaders.SET_COOKIE))
                 .contains("HttpOnly").contains("SameSite=Strict").contains("Path=/api/v1/auth");
 
-        String token = signup.getBody().get("accessToken").asText();
+        String token = signup.getBody().get("accessToken").asString();
         HttpHeaders h = new HttpHeaders();
         h.setBearerAuth(token);
         var me = http.exchange("/auth/me", HttpMethod.GET, new HttpEntity<>(h), JsonNode.class);
-        assertThat(me.getBody().get("email").asText()).isEqualTo(email.toLowerCase());
+        assertThat(me.getBody().get("email").asString()).isEqualTo(email.toLowerCase());
     }
 
     @Test
@@ -1060,7 +1062,7 @@ class AuthFlowIT extends IntegrationTest {
         post("/auth/signup", Map.of("name", "A", "email", email, "password", "correct-horse"), null);
         var again = post("/auth/signup", Map.of("name", "B", "email", email.toUpperCase(), "password", "correct-horse"), null);
         assertThat(again.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-        assertThat(again.getBody().at("/error/code").asText()).isEqualTo("EMAIL_TAKEN");
+        assertThat(again.getBody().at("/error/code").asString()).isEqualTo("EMAIL_TAKEN");
     }
 
     @Test
@@ -1089,7 +1091,7 @@ class AuthFlowIT extends IntegrationTest {
 
         var reuse = post("/auth/refresh", null, first);           // stolen old token
         assertThat(reuse.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
-        assertThat(reuse.getBody().at("/error/code").asText()).isEqualTo("REFRESH_TOKEN_REUSED");
+        assertThat(reuse.getBody().at("/error/code").asString()).isEqualTo("REFRESH_TOKEN_REUSED");
 
         var afterReuse = post("/auth/refresh", null, second);     // the legitimate one is dead too
         assertThat(afterReuse.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
@@ -1123,7 +1125,7 @@ class AuthFlowIT extends IntegrationTest {
     void jwksPublishesOnlyThePublicKey() {
         JsonNode jwks = http.getForObject("/.well-known/jwks.json", JsonNode.class);
         JsonNode key = jwks.get("keys").get(0);
-        assertThat(key.get("kty").asText()).isEqualTo("RSA");
+        assertThat(key.get("kty").asString()).isEqualTo("RSA");
         assertThat(key.has("d")).isFalse();                       // private exponent never published
     }
 }
@@ -1156,21 +1158,20 @@ plugins { id("hiretrack.service-conventions") }
 
 dependencies {
     implementation("org.springframework.cloud:spring-cloud-starter-gateway-server-webflux")
-    implementation("org.springframework.boot:spring-boot-starter-oauth2-resource-server")
+    implementation("org.springframework.boot:spring-boot-starter-security-oauth2-resource-server")
     implementation("org.springframework.boot:spring-boot-starter-data-redis-reactive")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("io.micrometer:micrometer-registry-prometheus")
-    implementation("io.micrometer:micrometer-tracing-bridge-otel")
-    implementation("io.opentelemetry:opentelemetry-exporter-otlp")
+    implementation("org.springframework.boot:spring-boot-starter-opentelemetry")
 
-    testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-webflux-test")   // WebTestClient
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
-    testImplementation("org.testcontainers:junit-jupiter")
+    testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("io.projectreactor:reactor-test")
     testImplementation(libs.wiremock)
     testImplementation(project(":platform:test-support")) {
         // only TestJwt is needed; keep the servlet stack out of this WebFlux app
-        exclude(group = "org.springframework.boot", module = "spring-boot-starter-web")
+        exclude(group = "org.springframework.boot", module = "spring-boot-starter-webmvc")
     }
 }
 ```
@@ -1234,9 +1235,11 @@ management:
   tracing:
     sampling:
       probability: ${TRACING_SAMPLE_RATE:1.0}
-  otlp:
+  opentelemetry:
     tracing:
-      endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
+      export:
+        otlp:
+          endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
 
 logging:
   structured:
@@ -1550,7 +1553,8 @@ Expected: the first five return `5xx` (job-feed-service isn't running yet, so th
 ```yaml
 management:
   tracing:
-    enabled: false
+    export:
+      enabled: false
 logging:
   structured:
     format:
@@ -1567,7 +1571,7 @@ import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
+import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
