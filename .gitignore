@@ -43,3 +43,7 @@ contracts/pacts/
 *.tfstate.*
 *.tfplan
 crash.log
+
+# Playwright output (Phase 11)
+test-results/
+playwright-report/

@@ -20,18 +20,24 @@
 
 Consumers write contracts into `contracts/pacts/`; providers verify them. A provider change that breaks a consumer fails the provider's build.
 
-Add to `services/match-service/build.gradle.kts` (consumer) and `services/ai-service/build.gradle.kts` (provider):
+Add the Pact libraries to the consumers (`match-service`, `analytics-service`) and the providers (`ai-service`, `application-service`). Each service gets only the library it needs, plus the same test settings:
 
 ```kotlin
 dependencies {
-    testImplementation(libs.pact.consumer)   // in match-service
-    testImplementation(libs.pact.provider)   // in ai-service
+    testImplementation(libs.pact.consumer)   // in match-service and analytics-service
+    testImplementation(libs.pact.provider)   // in ai-service and application-service
 }
 tasks.withType<Test>().configureEach {
     systemProperty("pact.rootDir", rootProject.file("contracts/pacts").path)
     systemProperty("pact.verifier.publishResults", "false")
 }
 ```
+
+Three things the tests below rely on, all easy to get wrong with Pact JVM 4.6:
+
+- **Spec version.** Pact 4.6 defaults to the V4 spec, whose `@Pact` methods take a `PactBuilder`. These tests use the V3 builders (`PactDslWithProvider`, `MessagePactBuilder`), so `@PactTestFor` sets `pactVersion = PactSpecVersion.V3`.
+- **Arrays of strings.** `eachLike("x", 1).stringType("y")` describes an array of *objects* (`[{"y": "…"}]`). For `["…"]` use `eachLike("x", PactDslJsonRootValue.stringType("y"), 1)`.
+- **Fixed examples.** `datetime(...)` and `uuid(...)` without an example use "now" in the machine's timezone (`+0530`, which `Instant` can't parse) and change the pact file on every run. Give date-times a fixed UTC example.
 
 ### Consumer: match-service expects this from ai-service
 
@@ -42,9 +48,11 @@ package com.aravindakv.hiretrack.match.contract;
 
 import au.com.dius.pact.consumer.MockServer;
 import au.com.dius.pact.consumer.dsl.PactDslJsonBody;
+import au.com.dius.pact.consumer.dsl.PactDslJsonRootValue;
 import au.com.dius.pact.consumer.dsl.PactDslWithProvider;
 import au.com.dius.pact.consumer.junit5.PactConsumerTestExt;
 import au.com.dius.pact.consumer.junit5.PactTestFor;
+import au.com.dius.pact.core.model.PactSpecVersion;
 import au.com.dius.pact.core.model.RequestResponsePact;
 import au.com.dius.pact.core.model.annotations.Pact;
 import com.aravindakv.hiretrack.match.client.Clients;
@@ -59,7 +67,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(PactConsumerTestExt.class)
-@PactTestFor(providerName = "ai-service")
+@PactTestFor(providerName = "ai-service", pactVersion = PactSpecVersion.V3)   // V3 builders (PactDslWithProvider); Pact 4.6 defaults to V4
 class AiServicePactTest {
 
     @Pact(consumer = "match-service")
@@ -68,6 +76,7 @@ class AiServicePactTest {
                 .given("the AI provider returns a valid match")
                 .uponReceiving("a real-time match request")
                     .method("POST").path("/internal/match")
+                    .headers("Content-Type", "application/json")   // what RestClient sends (no charset)
                     .matchHeader("X-Internal-Token", ".+", "test-internal-token")
                     .body(new PactDslJsonBody()
                             .integerType("userId", 1)
@@ -78,8 +87,8 @@ class AiServicePactTest {
                     .status(200)
                     .body(new PactDslJsonBody()
                             .integerType("fitScore", 70)
-                            .eachLike("missingSkills", 1).stringType("Kafka").closeArray().asBody()
-                            .minArrayLike("suggestedBullets", 3, 3).stringType("bullet").closeArray().asBody()
+                            .eachLike("missingSkills", PactDslJsonRootValue.stringType("Kafka"), 1)          // array of strings
+                            .minArrayLike("suggestedBullets", 3, PactDslJsonRootValue.stringType("bullet"), 3)
                             .stringType("company", "Acme")
                             .stringType("role", "Engineer")
                             .stringType("provider", "openai")
@@ -93,6 +102,8 @@ class AiServicePactTest {
                 .given("the user has used today's match quota")
                 .uponReceiving("a match request over quota")
                     .method("POST").path("/internal/match")
+                    .headers("Content-Type", "application/json")   // what RestClient sends (no charset)
+                    .matchHeader("X-Internal-Token", ".+", "test-internal-token")   // match-service always sends it
                     .body(new PactDslJsonBody().integerType("userId", 2).stringType("requestId", "match-2-key")
                             .stringType("resumeText", "Java").stringType("jobDescription", "Java role"))
                 .willRespondWith()
@@ -130,6 +141,8 @@ class AiServicePactTest {
     }
 }
 ```
+
+Both interactions declare `Content-Type: application/json` (what `RestClient` sends; `.body(...)` alone would expect `; charset=UTF-8`) and `X-Internal-Token`, because ai-service rejects requests without it before any other check. Leave the token out and the provider test fails with 401 `INTERNAL_AUTH_REQUIRED` instead of the 429 you meant to verify.
 
 ### Provider: ai-service proves it honours the contract
 
@@ -228,6 +241,7 @@ import au.com.dius.pact.consumer.junit5.PactConsumerTestExt;
 import au.com.dius.pact.consumer.junit5.PactTestFor;
 import au.com.dius.pact.consumer.junit5.ProviderType;
 import au.com.dius.pact.consumer.MessagePactBuilder;
+import au.com.dius.pact.core.model.PactSpecVersion;
 import au.com.dius.pact.core.model.annotations.Pact;
 import au.com.dius.pact.core.model.messaging.Message;
 import au.com.dius.pact.core.model.messaging.MessagePact;
@@ -238,12 +252,17 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import java.util.List;
+import java.util.TimeZone;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(PactConsumerTestExt.class)
-@PactTestFor(providerName = "application-service", providerType = ProviderType.ASYNCH)
+@PactTestFor(providerName = "application-service", providerType = ProviderType.ASYNCH, pactVersion = PactSpecVersion.V3)   // V3 MessagePactBuilder
 class ApplicationEventsPactTest {
+
+    // Fixed UTC examples: Instant can't parse "+0530", and "now" would change the pact file on every run.
+    private static final TimeZone UTC = TimeZone.getTimeZone("UTC");
 
     @Pact(consumer = "analytics-service")
     MessagePact stageChanged(MessagePactBuilder builder) {
@@ -251,15 +270,16 @@ class ApplicationEventsPactTest {
                 .withContent(new PactDslJsonBody()
                         .uuid("eventId")
                         .stringValue("type", "application.stage-changed")
+                        .integerType("schemaVersion", 1)                    // EventEnvelope needs it
                         .integerType("userId", 1)
                         .stringMatcher("aggregateId", "application-\\d+", "application-5")
                         .integerType("aggregateVersion", 2)
-                        .datetime("occurredAt", "yyyy-MM-dd'T'HH:mm:ss.SSSSSSX")
+                        .datetime("occurredAt", "yyyy-MM-dd'T'HH:mm:ss.SSSSSSX", Instant.parse("2026-11-15T10:00:00Z"), UTC)
                         .object("payload")
                             .integerType("applicationId", 5)
                             .stringMatcher("stage", "WISHLIST|APPLIED|INTERVIEW|OFFER|REJECTED", "INTERVIEW")
-                            .date("appliedDate", "yyyy-MM-dd")
-                            .datetime("respondedAt", "yyyy-MM-dd'T'HH:mm:ss.SSSSSSX")
+                            .date("appliedDate", "yyyy-MM-dd", java.util.Date.from(Instant.parse("2026-11-10T00:00:00Z")), UTC)
+                            .datetime("respondedAt", "yyyy-MM-dd'T'HH:mm:ss.SSSSSSX", Instant.parse("2026-11-14T09:00:00Z"), UTC)
                         .closeObject())
                 .toPact();
     }
@@ -273,6 +293,8 @@ class ApplicationEventsPactTest {
     }
 }
 ```
+
+The contract lists every envelope field analytics needs to parse an event, including `schemaVersion`: `EventEnvelope` has it as an `int`, so a contract without it fails with "Cannot map `null` into type `int`".
 
 The provider, application-service, verifies that a real event built by its own `ApplicationEvents` code matches. Add `@PactVerifyProvider("an application stage-changed event")` on a method that returns `event.toJson(json)` for an application you create and move through stages in the test, using `MessageTestTarget`.
 
@@ -566,7 +588,7 @@ export function matches(data) {
 }
 ```
 
-Run it against the **e2e stack**, where ai-service uses the fake provider. Real AI calls would cost money and hit rate limits. For realistic AI latency, set `AI_FAKE_DELAY=8s` in `docker-compose.e2e.yml`.
+Run it against the **e2e stack**, where ai-service uses the fake provider. Like Step 11.2, that stack needs `docker-compose.app.yml` from Phase 12; write `perf/load.js` now and run it after Phase 12. Real AI calls would cost money and hit rate limits. For realistic AI latency, set `AI_FAKE_DELAY=8s` in `docker-compose.e2e.yml`.
 
 ```bash
 k6 run perf/load.js

@@ -25,6 +25,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 class ApplicationIT extends IntegrationTest {
 
@@ -37,6 +38,8 @@ class ApplicationIT extends IntegrationTest {
     }
 
     @Autowired ObjectMapper json;
+
+    @Autowired org.testcontainers.kafka.KafkaContainer kafkaContainer;
 
     private ResponseEntity<JsonNode> create(long user, Map<String, Object> body) {
         return http.exchange("/applications", HttpMethod.POST,
@@ -162,5 +165,22 @@ class ApplicationIT extends IntegrationTest {
                 .containsExactly("application.created", "application.stage-changed", "application.stage-changed");
         assertThat(events).extracting(EventEnvelope::aggregateVersion).containsExactly(0L, 1L, 2L);
         assertThat(events.get(2).payload().get("respondedAt").isNull()).isFalse();
+    }
+
+    @Test
+    void outboxCatchesUpAfterAKafkaOutage() {
+        var docker = kafkaContainer.getDockerClient();
+        docker.pauseContainerCmd(kafkaContainer.getContainerId()).exec();
+        long id;
+        try {
+            id = createManual(230);                                    // still 201: the event waits in the outbox
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox WHERE published_at IS NULL", Integer.class)).isPositive();
+        } finally {
+            docker.unpauseContainerCmd(kafkaContainer.getContainerId()).exec();
+        }
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() ->
+                assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox WHERE published_at IS NULL", Integer.class)).isZero());
+        assertThat(kafka().readAll("application-events", Duration.ofSeconds(4)).stream()
+                .anyMatch(r -> r.value().contains("\"application-" + id + "\""))).isTrue();
     }
 }

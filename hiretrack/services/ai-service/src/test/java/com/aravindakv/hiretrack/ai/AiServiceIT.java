@@ -153,4 +153,14 @@ class AiServiceIT extends IntegrationTest {
         assertThat(jdbc.queryForObject("SELECT cost_usd FROM ai_usage WHERE usage_key = ?", String.class, batchId + ":run-1"))
                 .isEqualTo("0.001800");
     }
+
+    @Test
+    void circuitOpensAfterRepeatedProviderFailuresAndFailsFast() {
+        openai.stubFor(post("/v1/chat/completions").willReturn(aResponse().withStatus(503)));
+        for (int i = 0; i < 12; i++) match(320, "cb-" + UUID.randomUUID());
+        openai.resetRequests();
+        var res = match(320, "cb-" + UUID.randomUUID());
+        assertThat(res.getBody().at("/error/code").asString()).isEqualTo("AI_UNAVAILABLE");
+        openai.verify(0, postRequestedFor(urlEqualTo("/v1/chat/completions")));   // didn't even try
+    }
 }

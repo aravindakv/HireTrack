@@ -1,0 +1,13 @@
+services:
+  ai-service:
+    environment:
+      AI_PROVIDER: fake
+      AI_FAKE_DELAY: 2s
+      HIRETRACK_AI_DAILY_MATCH_QUOTA: "100000"
+  job-feed-service:
+    environment:
+      ADZUNA_BASE_URL: http://wiremock:8080
+      ADZUNA_APP_ID: e2e
+      ADZUNA_APP_KEY: e2e
+      HIRETRACK_FEED_SUBMIT_INTERVAL: 10s     # submitter and poller run every 10 s instead of 2 min / 1 min
+      HIRETRACK_FEED_POLL_INTERVAL: 10s

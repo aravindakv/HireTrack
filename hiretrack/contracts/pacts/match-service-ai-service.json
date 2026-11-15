@@ -1,0 +1,310 @@
+{
+  "consumer": {
+    "name": "match-service"
+  },
+  "interactions": [
+    {
+      "description": "a real-time match request",
+      "providerStates": [
+        {
+          "name": "the AI provider returns a valid match"
+        }
+      ],
+      "request": {
+        "body": {
+          "jobDescription": "Java role",
+          "requestId": "match-1-key",
+          "resumeText": "Java Spring",
+          "userId": 1
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Internal-Token": "test-internal-token"
+        },
+        "matchingRules": {
+          "body": {
+            "$.jobDescription": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.requestId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.resumeText": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.userId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            }
+          },
+          "header": {
+            "X-Internal-Token": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": ".+"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/internal/match"
+      },
+      "response": {
+        "body": {
+          "company": "Acme",
+          "fitScore": 70,
+          "missingSkills": [
+            "Kafka"
+          ],
+          "model": "model-id",
+          "provider": "openai",
+          "role": "Engineer",
+          "suggestedBullets": [
+            "bullet",
+            "bullet",
+            "bullet"
+          ]
+        },
+        "headers": {
+          "Content-Type": "application/json; charset=UTF-8"
+        },
+        "matchingRules": {
+          "body": {
+            "$.company": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.fitScore": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.missingSkills": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.missingSkills[*]": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.model": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.provider": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.role": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.suggestedBullets": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 3
+                }
+              ]
+            },
+            "$.suggestedBullets[*]": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json(;\\s?charset=[\\w\\-]+)?"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a match request over quota",
+      "providerStates": [
+        {
+          "name": "the user has used today's match quota"
+        }
+      ],
+      "request": {
+        "body": {
+          "jobDescription": "Java role",
+          "requestId": "match-2-key",
+          "resumeText": "Java",
+          "userId": 2
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "X-Internal-Token": "test-internal-token"
+        },
+        "matchingRules": {
+          "body": {
+            "$.jobDescription": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.requestId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.resumeText": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.userId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            }
+          },
+          "header": {
+            "X-Internal-Token": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": ".+"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/internal/match"
+      },
+      "response": {
+        "body": {
+          "error": {
+            "code": "MATCH_QUOTA_EXCEEDED",
+            "message": "quota"
+          }
+        },
+        "headers": {
+          "Content-Type": "application/json; charset=UTF-8",
+          "Retry-After": "3600"
+        },
+        "matchingRules": {
+          "body": {
+            "$.error.message": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Content-Type": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "application/json(;\\s?charset=[\\w\\-]+)?"
+                }
+              ]
+            },
+            "Retry-After": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "\\d+"
+                }
+              ]
+            }
+          }
+        },
+        "status": 429
+      }
+    }
+  ],
+  "metadata": {
+    "pact-jvm": {
+      "version": "4.6.17"
+    },
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  },
+  "provider": {
+    "name": "ai-service"
+  }
+}

@@ -1,0 +1,136 @@
+{
+  "consumer": {
+    "name": "analytics-service"
+  },
+  "messages": [
+    {
+      "contents": {
+        "aggregateId": "application-5",
+        "aggregateVersion": 2,
+        "eventId": "e2490de5-5bd3-43d5-b7c4-526e33f71304",
+        "occurredAt": "2026-11-15T10:00:00.000000Z",
+        "payload": {
+          "applicationId": 5,
+          "appliedDate": "2026-11-10",
+          "respondedAt": "2026-11-14T09:00:00.000000Z",
+          "stage": "INTERVIEW"
+        },
+        "schemaVersion": 1,
+        "type": "application.stage-changed",
+        "userId": 1
+      },
+      "description": "an application stage-changed event",
+      "generators": {
+        "body": {
+          "$.eventId": {
+            "type": "Uuid"
+          }
+        }
+      },
+      "matchingRules": {
+        "body": {
+          "$.aggregateId": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "regex",
+                "regex": "application-\\d+"
+              }
+            ]
+          },
+          "$.aggregateVersion": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "integer"
+              }
+            ]
+          },
+          "$.eventId": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "regex",
+                "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+              }
+            ]
+          },
+          "$.occurredAt": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "format": "yyyy-MM-dd'T'HH:mm:ss.SSSSSSX",
+                "match": "timestamp"
+              }
+            ]
+          },
+          "$.payload.applicationId": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "integer"
+              }
+            ]
+          },
+          "$.payload.appliedDate": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "format": "yyyy-MM-dd",
+                "match": "date"
+              }
+            ]
+          },
+          "$.payload.respondedAt": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "format": "yyyy-MM-dd'T'HH:mm:ss.SSSSSSX",
+                "match": "timestamp"
+              }
+            ]
+          },
+          "$.payload.stage": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "regex",
+                "regex": "WISHLIST|APPLIED|INTERVIEW|OFFER|REJECTED"
+              }
+            ]
+          },
+          "$.schemaVersion": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "integer"
+              }
+            ]
+          },
+          "$.userId": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "integer"
+              }
+            ]
+          }
+        }
+      },
+      "metaData": {
+        "contentType": "application/json"
+      }
+    }
+  ],
+  "metadata": {
+    "pact-jvm": {
+      "version": "4.6.17"
+    },
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  },
+  "provider": {
+    "name": "application-service"
+  }
+}

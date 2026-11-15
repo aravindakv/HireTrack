@@ -10,4 +10,10 @@ dependencies {
     runtimeOnly("org.postgresql:postgresql")
 
     testImplementation(project(":platform:test-support"))
+    testImplementation(libs.pact.consumer)   // writes contracts/pacts/analytics-service-application-service.json
+}
+
+tasks.withType<Test>().configureEach {
+    systemProperty("pact.rootDir", rootProject.file("contracts/pacts").path)
+    systemProperty("pact.verifier.publishResults", "false")
 }

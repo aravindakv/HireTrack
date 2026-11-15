@@ -10,4 +10,10 @@ dependencies {
     runtimeOnly("org.postgresql:postgresql")
 
     testImplementation(project(":platform:test-support"))
+    testImplementation(libs.pact.provider)   // verifies analytics-service's event pact in contracts/pacts/
+}
+
+tasks.withType<Test>().configureEach {
+    systemProperty("pact.rootDir", rootProject.file("contracts/pacts").path)
+    systemProperty("pact.verifier.publishResults", "false")
 }

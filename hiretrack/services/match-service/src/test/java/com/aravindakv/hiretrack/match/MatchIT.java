@@ -142,4 +142,16 @@ class MatchIT extends IntegrationTest {
         assertThat(events).hasSize(1);
         assertThat(events.get(0).payload().get("fitScore").asInt()).isEqualTo(71);
     }
+
+    @Test
+    void aiSlowerThanTheBudgetFailsWithin16Seconds() {
+        deps.stubFor(post("/internal/match").willReturn(aResponse().withFixedDelay(20_000)
+                .withHeader("Content-Type", "application/json").withBody(AI_OK)));
+        long start = System.nanoTime();
+        var res = run(520, newKey(), "job");
+        long seconds = java.time.Duration.ofNanos(System.nanoTime() - start).toSeconds();
+        assertThat(res.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
+        assertThat(seconds).isLessThan(17);                       // ai-timeout 15 s + overhead
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM matches WHERE user_id = 520", Integer.class)).isZero();
+    }
 }
