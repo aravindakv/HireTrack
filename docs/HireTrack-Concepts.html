@@ -146,6 +146,24 @@ PasswordEncoder passwordEncoder() {
     return new BCryptPasswordEncoder(12);
 }</code></pre>
 
+  <h3>Example: two users, same password</h3>
+  <p>Alice and Bob both register with the password <code>Summer2026!</code>. The <code>password_hash</code> column ends up holding two completely different values:</p>
+<pre><code><span class="c">-- users.password_hash</span>
+alice@x.com  $2a$12$y.kaDrqO3ie4iG4/u1jyq.OQ3fE6KUwaAb.6yaL8lXr4gJhGXcX3S
+bob@x.com    $2a$12$aMF9oZ.SslfMCmDf8Nl.me5ZpLty8i4AF8P8iP41KWI2FB5kk7Ho6</code></pre>
+  <p>Each 60-character string packs everything needed to check a password later:</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Part</th><th>Alice</th><th>Bob</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>$2a$</code></td><td><code>$2a$</code></td><td><code>$2a$</code></td><td>Algorithm version (bcrypt)</td></tr>
+      <tr><td><code>12$</code></td><td><code>12$</code></td><td><code>12$</code></td><td>Cost factor: 2¹² rounds</td></tr>
+      <tr><td>Next 22 chars</td><td><code>y.kaDrqO3ie4iG4/u1jyq.</code></td><td><code>aMF9oZ.SslfMCmDf8Nl.me</code></td><td>Random 128-bit salt, generated per hash</td></tr>
+      <tr><td>Last 31 chars</td><td><code>OQ3fE6KUwaAb…GhGXcX3S</code></td><td><code>5ZpLty8i4AF8…FB5kk7Ho6</code></td><td>The hash of salt + password</td></tr>
+    </tbody>
+  </table></div>
+  <p>At login, <code>encoder.matches("Summer2026!", storedHash)</code> reads the cost and salt back out of the stored string, re-hashes the typed password with them and compares the result. Both checks return <code>true</code>, and nothing else needs to be stored.</p>
+  <p class="why">Because the salts differ, someone who steals the table can't see that Alice and Bob share a password, and a precomputed "rainbow table" of common passwords is useless: every guess has to be re-hashed per user, at a quarter of a second each.</p>
+
   <h3>The rules around it</h3>
   <div class="grid2">
     <div class="card"><h4>8 to 72 bytes</h4><p>bcrypt silently ignores everything after byte 72, so longer passwords are refused instead of being quietly truncated. Length is measured in UTF-8 bytes, not characters.</p></div>

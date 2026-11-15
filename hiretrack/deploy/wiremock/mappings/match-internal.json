@@ -1,0 +1,8 @@
+{
+  "request": { "method": "GET", "urlPathPattern": "/internal/users/[0-9]+/matches/42" },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "id": 42, "company": "Acme", "role": "Backend Engineer" }
+  }
+}
