@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>HireTrack Engineering Concepts</title>
-<meta name="description" content="How HireTrack implements password hashing, JWT access and refresh tokens, idempotency, circuit breakers, AI guardrails, Kafka events, S3 storage, rate limiting and scaling.">
+<meta name="description" content="How HireTrack implements password hashing, JWT access and refresh tokens, idempotency, circuit breakers, AI guardrails, Kafka events, S3 storage, rate limiting, TTLs and scaling.">
 <style>
 :root {
   --bg: #f7f7f5; --surface: #ffffff; --text: #1d1d1b; --muted: #5f5f5a; --line: #d6d5cf;
@@ -113,6 +113,7 @@ footer { color: var(--muted); font-size: 13px; margin-top: 40px; }
     <a href="#kafka">Kafka events</a>
     <a href="#s3">S3 storage</a>
     <a href="#ratelimit">Rate limits &amp; Redis</a>
+    <a href="#ttl">TTL &amp; expiry</a>
     <a href="#scaling">Scaling</a>
     <a href="#gateway">API gateway &amp; service trust</a>
     <a href="#consistency">Data ownership &amp; CQRS</a>
@@ -572,10 +573,88 @@ try {
       <tr><td>identity-service</td><td>Failed-login counter per email</td><td>15 minutes</td></tr>
       <tr><td>ai-service</td><td>Daily match quota per user</td><td>26 hours</td></tr>
       <tr><td>analytics-service</td><td>Dashboard cache, one hash per user (field = timezone), deleted when an event arrives</td><td>30 seconds</td></tr>
-      <tr><td>job-feed-service</td><td>Adzuna results per search (shared by every user with the same search), plus a lock so only one worker fetches</td><td>6 hours</td></tr>
+      <tr><td>job-feed-service</td><td>Adzuna results per search (shared by every user with the same search), plus a lock so only one worker fetches</td><td>1 hour</td></tr>
     </tbody>
   </table></div>
   <p class="why">Redis holds only counters and caches. Losing it costs a few cache misses and briefly resets limits, but no user data.</p>
+</section>
+
+<!-- ================= TTL ================= -->
+<section class="concept" id="ttl">
+  <h2>Time-to-live (TTL) and expiry <span class="badge built">Built</span></h2>
+  <p class="where">identity <code>application.yml</code> (<code>access-token-ttl</code>, <code>refresh-token-ttl</code>, <code>failed-login-window</code>) · <code>LoginAttempts.java</code> · <code>MatchQuota.java</code> · <code>DashboardCache.java</code> · <code>PostingFetcher.java</code> · <code>IdempotencyService.java</code> · <code>OutboxRelay.java</code> · <code>deploy/docker-compose.yml</code>, <code>nginx.conf</code></p>
+
+  <p>A TTL is how long a piece of data stays valid before it is ignored or deleted. HireTrack uses TTLs for four different jobs: to <strong>limit damage</strong> (a stolen token stops working), to <strong>count within a window</strong> (5 failed logins per 15 minutes), to <strong>keep caches fresh enough</strong>, and to <strong>stop tables and memory growing forever</strong>.</p>
+
+  <h3>Four ways expiry is enforced</h3>
+  <div class="grid2">
+    <div class="card"><h4>The reader checks a timestamp</h4><p>The data carries its own end time and whoever reads it refuses it after that: JWT <code>exp</code>, <code>refresh_tokens.expires_at</code>, <code>idempotency_keys.expires_at</code>. Nothing has to delete it on time.</p></div>
+    <div class="card"><h4>The store deletes it</h4><p>Redis <code>EXPIRE</code> / <code>SET … EX</code>, Kafka topic retention, Prometheus TSDB retention. The key simply disappears.</p></div>
+    <div class="card"><h4>A scheduled job deletes it</h4><p>Postgres has no row TTL, so <code>@Scheduled</code> jobs remove old outbox rows and expired idempotency keys.</p></div>
+    <div class="card"><h4>The browser drops it</h4><p>Cookie <code>Max-Age</code>, <code>Cache-Control</code> on static files, and CORS preflight <code>max-age</code>.</p></div>
+  </div>
+
+  <h3>Every TTL in the project</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>What</th><th>TTL</th><th>Enforced by</th><th>When it runs out</th></tr></thead>
+    <tbody>
+      <tr><td>Access token (JWT)</td><td>15 min</td><td><code>exp</code> claim, checked by the gateway and every service</td><td><code>401</code>; the frontend calls <code>/auth/refresh</code> and retries</td></tr>
+      <tr><td>Refresh token</td><td>7 days</td><td><code>expires_at</code> row in identity-db, and cookie <code>Max-Age</code> of the same length</td><td><code>401 REFRESH_TOKEN_EXPIRED</code>: log in again. Logout sends <code>Max-Age=0</code> to clear the cookie at once</td></tr>
+      <tr><td>Failed-login counter</td><td>15 min</td><td>Redis <code>EXPIRE</code>, set on the first failure (same Lua script as <code>INCR</code>)</td><td>The lockout lifts; <code>Retry-After</code> tells the client how long to wait</td></tr>
+      <tr><td>Daily match quota</td><td>26 h</td><td>Redis key per user per UTC date, <code>EXPIRE</code> on first use (same Lua script as <code>INCR</code>)</td><td>Key garbage-collected; the next UTC day already uses a new key</td></tr>
+      <tr><td>Dashboard cache</td><td>30 s</td><td>Redis <code>EXPIRE</code>, plus deleted after each projected event</td><td>Next request recomputes from the read model</td></tr>
+      <tr><td>Adzuna search results</td><td>1 h</td><td><code>SET … EX</code>; the key contains the UTC hour, and the TTL matches it</td><td>Next worker in a new hour fetches again</td></tr>
+      <tr><td>Adzuna fetch lock</td><td>30 s</td><td><code>SETNX</code> with expiry</td><td>If the lock holder died, another worker takes over</td></tr>
+      <tr><td>Idempotency key</td><td>24 h</td><td><code>expires_at</code> checked in the claim SQL; hourly cleanup at <code>:15</code></td><td>The same key may be reused for a new request</td></tr>
+      <tr><td>Idempotency in-progress lock</td><td>60 s (30 s in match-service)</td><td><code>locked_until</code> checked in the claim SQL</td><td>A crashed attempt can be retried with the same key</td></tr>
+      <tr><td>Feed items and unused postings</td><td>30 days</td><td>Daily job at 03:20, <code>hiretrack.feed.retention-days</code>; <code>SAVED</code> items are kept, runs after 90 days</td><td>Row deleted</td></tr>
+      <tr><td>Published outbox rows</td><td>7 days</td><td>Daily job at 03:30</td><td>Row deleted; the event is already in Kafka</td></tr>
+      <tr><td>Kafka events (local)</td><td>Forever</td><td><code>KAFKA_LOG_RETENTION_HOURS: -1</code></td><td>Never, so read models can be rebuilt by replay</td></tr>
+      <tr><td>Prometheus metrics</td><td>15 days</td><td><code>--storage.tsdb.retention.time</code></td><td>Old samples dropped</td></tr>
+      <tr><td>Built JS/CSS (<code>/assets/</code>)</td><td>1 year</td><td>nginx <code>expires 1y</code>, <code>immutable</code></td><td>Safe because file names contain a content hash; <code>index.html</code> is <code>no-store</code> so a deploy is picked up at once</td></tr>
+      <tr><td>CORS preflight</td><td>1 h</td><td>Gateway <code>setMaxAge(3600)</code></td><td>Browser sends a fresh <code>OPTIONS</code></td></tr>
+      <tr><td>Dev/test JWTs</td><td>1 h default</td><td><code>tools/mint-jwt.sh</code>, <code>TestJwt.token(…, ttlSeconds)</code></td><td>Mint another</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>The patterns behind them</h3>
+
+  <p><strong>1. Short-lived plus revocable.</strong> An access JWT can't be revoked, because services verify it without a lookup. So it lives only 15 minutes, which bounds the damage if it leaks. The 7-day refresh token can be revoked because it is a database row, and it is rotated on every use (see <a href="#tokens">tokens</a>). The short TTL buys statelessness; the long one buys convenience.</p>
+
+  <p><strong>2. Fixed-window counter.</strong> Increment a key, and set its TTL only when the count is 1. Both happen in one Lua script, which Redis runs atomically:</p>
+  <div class="file">LoginAttempts.java (MatchQuota.java uses the same script)</div>
+<pre><code>private static final RedisScript&lt;Long&gt; INCR_WITH_TTL = RedisScript.of("""
+        local n = redis.call('INCR', KEYS[1])
+        if n == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
+        return n""", Long.class);
+
+redis.execute(INCR_WITH_TTL, List.of(key(email)),             <span class="c">// login_fail:&lt;email&gt;</span>
+        String.valueOf(props.auth().failedLoginWindow().toSeconds()));   <span class="c">// 15m, starts at the first failure</span></code></pre>
+  <p>Setting the TTL only once means later failures don't push the window out. Otherwise an attacker who keeps guessing would keep the real user locked out forever. Doing it in one script matters too: as two separate commands, a crash between <code>INCR</code> and <code>EXPIRE</code> would leave a key with no TTL, and a lockout or used-up quota that never resets.</p>
+
+  <p><strong>3. Key per period, TTL only for clean-up.</strong> The match quota key is <code>ai_quota:&lt;userId&gt;:&lt;UTC date&gt;</code>. The date in the key does the resetting: at midnight UTC a new key starts at zero. The 26-hour TTL just removes yesterday's key, and is longer than 24 hours so a key can never vanish while its day is still running.</p>
+
+  <p><strong>4. Short TTL plus explicit invalidation.</strong> The dashboard cache would be stale for up to 30 seconds on its own. Instead, the projector deletes the user's cache key right after it commits a new event, so a stage change shows up on the next load. The 30-second TTL is the safety net if an eviction is missed.</p>
+  <div class="file">Projector.java</div>
+<pre><code>@Override public void afterCommit() { cache.evict(userId); }   <span class="c">// after commit, so no one re-caches old data</span></code></pre>
+
+  <p><strong>5. Locks are leases.</strong> Any lock that can be held by a process that might crash has a TTL: the Adzuna fetch lock (30 s) and the idempotency <code>locked_until</code> (60 s). The TTL must be longer than the slowest normal run, which is why match-service sets 30 s ("longer than the slowest match") rather than something shorter. Too short and two workers run at once; too long and a crash blocks retries for longer.</p>
+
+  <p><strong>6. Check at read time, delete later.</strong> An expired idempotency key is reusable as soon as <code>expires_at &lt; now()</code>, because the claim SQL checks it. The hourly cleanup only frees space, and waits an extra hour so it never races a request that is using the key right at the boundary.</p>
+<pre><code>DELETE FROM idempotency_keys WHERE expires_at &lt; now() - interval '1 hour'</code></pre>
+
+  <h3>How the values were chosen</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Too short</th><th>Too long</th></tr></thead>
+    <tbody>
+      <tr><td>More refresh calls, more cache misses, more Adzuna and AI spend, retries that run twice</td><td>Stale data, a leaked token works longer, a crashed lock blocks retries, more memory and disk</td></tr>
+    </tbody>
+  </table></div>
+  <p>Each TTL is tied to something real: the access token to how much exposure a leak is allowed, the idempotency key (24 h) to how long a client could plausibly retry, outbox retention (7 days) to how long you'd want to debug a publish, and the Adzuna cache to the API plan's request limit.</p>
+
+  <p><strong>7. TTL matches the key's period.</strong> The Adzuna cache key contains the UTC hour, so a new hour always means a new fetch. The TTL is therefore 1 hour too: a longer TTL would only keep old hourly keys in memory without ever serving them.</p>
+
+  <p class="why">Rule of thumb: put the expiry in the data when correctness depends on it (tokens, idempotency keys), and use store TTLs or cleanup jobs only to reclaim space. A cleanup job that runs late must never change behaviour.</p>
 </section>
 
 <!-- ================= SCALING ================= -->
@@ -791,6 +870,7 @@ try {
       <tr><td>Why RS256 instead of HS256?</td><td>Only identity-service can sign; every other service verifies with the public key (JWKS). With HS256, every verifier would hold the signing secret.</td></tr>
       <tr><td>How do you detect a stolen refresh token?</td><td>Rotation with token families: if an already-rotated token is used again, the whole family is revoked.</td></tr>
       <tr><td>How do you make POST retries safe?</td><td><code>Idempotency-Key</code> with a request hash, an atomic claim row, stored responses replayed for 24 h, 409 while in progress, 422 if the body changed, key released on 5xx.</td></tr>
+      <tr><td>How do you choose TTLs?</td><td>Tie each one to a real limit: 15-min access tokens bound a leak, 7-day refresh tokens for convenience but revocable, 24-h idempotency keys cover client retries, lock TTLs longer than the slowest run. Put the expiry in the data when correctness depends on it; use Redis TTLs or cleanup jobs only to reclaim space. Pair short cache TTLs with explicit eviction.</td></tr>
       <tr><td>How do you publish events reliably?</td><td>Transactional outbox plus relay with <code>SKIP LOCKED</code>; at-least-once delivery; consumers deduplicate by event ID and apply only newer aggregate versions.</td></tr>
       <tr><td>Exactly-once in Kafka?</td><td>Not end to end. Aim for effectively-once: at-least-once delivery plus idempotent consumers. Kafka's idempotent producer prevents broker-level duplicates only.</td></tr>
       <tr><td>How do you keep event order?</td><td>Partition by user ID so one user's events stay in order; versions guard against anything arriving out of order anyway.</td></tr>

@@ -561,7 +561,7 @@ Burn-rate alerts page when the error budget is being used up fast (2% in 1 hour)
 - **Stateless services:** 2–10 pods each on a horizontal autoscaler at 70% CPU. Plan for about 200 req/s per pod for simple reads and confirm with k6.
 - **PostgreSQL:** a single Multi-AZ primary (`db.m7g.large` class) handles this load easily. Add a read replica for analytics if needed.
 - **Connections:** the sum of pods × pool size must stay under `max_connections`. Use RDS Proxy and pools of 5–10 per pod.
-- **Redis:** rate limits, quotas, dashboard cache (30 s) and Adzuna result cache (6 h); one small primary plus a replica.
+- **Redis:** rate limits, quotas, dashboard cache (30 s) and Adzuna result cache (1 h); one small primary plus a replica.
 
 Headroom beyond Growth: every service scales horizontally; the first limits to reach are the AI provider's rate-limit tier, the Adzuna plan and the database primary, in that order.
 

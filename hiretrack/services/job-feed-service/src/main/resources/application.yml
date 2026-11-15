@@ -105,7 +105,7 @@ hiretrack:
     manual-refresh-cooldown: 1h
     submit-batch-size: 500
     max-score-attempts: 3
-    query-cache-ttl: 6h
+    query-cache-ttl: 1h                            # matches the hourly cache key in PostingFetcher
     retention-days: 30
   adzuna:
     base-url: ${ADZUNA_BASE_URL:https://api.adzuna.com}

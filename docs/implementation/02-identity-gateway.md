@@ -539,11 +539,20 @@ package com.aravindakv.hiretrack.identity.service;
 import com.aravindakv.hiretrack.common.web.ApiException;
 import com.aravindakv.hiretrack.identity.config.IdentityProperties;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Component;
+
+import java.util.List;
 
 /** Spec 4: 5 failed logins per email per 15 minutes. */
 @Component
 public class LoginAttempts {
+
+    /** INCR and set the TTL on the first increment, in one atomic step, so a crash can't leave a key without expiry. */
+    private static final RedisScript<Long> INCR_WITH_TTL = RedisScript.of("""
+            local n = redis.call('INCR', KEYS[1])
+            if n == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end
+            return n""", Long.class);
 
     private final StringRedisTemplate redis;
     private final IdentityProperties props;
@@ -563,10 +572,8 @@ public class LoginAttempts {
     }
 
     public void recordFailure(String email) {
-        Long count = redis.opsForValue().increment(key(email));
-        if (count != null && count == 1) {
-            redis.expire(key(email), props.auth().failedLoginWindow());
-        }
+        redis.execute(INCR_WITH_TTL, List.of(key(email)),
+                String.valueOf(props.auth().failedLoginWindow().toSeconds()));   // window starts at the first failure
     }
 
     public void reset(String email) {
