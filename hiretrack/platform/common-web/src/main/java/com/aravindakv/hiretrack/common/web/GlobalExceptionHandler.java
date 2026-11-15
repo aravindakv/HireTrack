@@ -71,7 +71,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     ResponseEntity<ErrorResponse> tooLarge(MaxUploadSizeExceededException e) {
-        return status(HttpStatus.PAYLOAD_TOO_LARGE, "FILE_TOO_LARGE", "The file is larger than the allowed size.");
+        return status(HttpStatus.CONTENT_TOO_LARGE, "FILE_TOO_LARGE", "The file is larger than the allowed size.");
     }
 
     @ExceptionHandler(OptimisticLockingFailureException.class)       // includes JPA @Version conflicts

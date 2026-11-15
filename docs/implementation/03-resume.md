@@ -886,7 +886,7 @@ class ResumeIT extends IntegrationTest {
     @Test
     void scannedPdfGets422() {
         var res = upload(103, newKey(), TestPdfs.blankPage());
-        assertThat(res.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(res.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_CONTENT);
         assertThat(res.getBody().at("/error/code").asString()).isEqualTo("PDF_HAS_NO_TEXT");
     }
 
@@ -894,7 +894,7 @@ class ResumeIT extends IntegrationTest {
     void fileOverTwoMegabytesGets413() {
         byte[] big = new byte[2 * 1024 * 1024 + 10];
         System.arraycopy("%PDF-".getBytes(), 0, big, 0, 5);
-        assertThat(upload(104, newKey(), big).getStatusCode()).isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE);
+        assertThat(upload(104, newKey(), big).getStatusCode()).isEqualTo(HttpStatus.CONTENT_TOO_LARGE);
     }
 
     @Test

@@ -434,11 +434,11 @@ public class ApiException extends RuntimeException {
     }
 
     public static ApiException payloadTooLarge(String code, String message) {
-        return of(HttpStatus.PAYLOAD_TOO_LARGE.value(), code, message);
+        return of(HttpStatus.CONTENT_TOO_LARGE.value(), code, message);
     }
 
     public static ApiException unprocessable(String code, String message) {
-        return of(HttpStatus.UNPROCESSABLE_ENTITY.value(), code, message);
+        return of(HttpStatus.UNPROCESSABLE_CONTENT.value(), code, message);
     }
 
     public static ApiException tooManyRequests(String code, String message, int retryAfterSeconds) {
@@ -534,7 +534,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     ResponseEntity<ErrorResponse> tooLarge(MaxUploadSizeExceededException e) {
-        return status(HttpStatus.PAYLOAD_TOO_LARGE, "FILE_TOO_LARGE", "The file is larger than the allowed size.");
+        return status(HttpStatus.CONTENT_TOO_LARGE, "FILE_TOO_LARGE", "The file is larger than the allowed size.");
     }
 
     @ExceptionHandler(OptimisticLockingFailureException.class)       // includes JPA @Version conflicts

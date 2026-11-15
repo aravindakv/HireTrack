@@ -48,11 +48,11 @@ public class ApiException extends RuntimeException {
     }
 
     public static ApiException payloadTooLarge(String code, String message) {
-        return of(HttpStatus.PAYLOAD_TOO_LARGE.value(), code, message);
+        return of(HttpStatus.CONTENT_TOO_LARGE.value(), code, message);
     }
 
     public static ApiException unprocessable(String code, String message) {
-        return of(HttpStatus.UNPROCESSABLE_ENTITY.value(), code, message);
+        return of(HttpStatus.UNPROCESSABLE_CONTENT.value(), code, message);
     }
 
     public static ApiException tooManyRequests(String code, String message, int retryAfterSeconds) {
