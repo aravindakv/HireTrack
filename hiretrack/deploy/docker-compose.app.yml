@@ -1,0 +1,135 @@
+name: hiretrack
+
+x-java-env: &java-env
+  SPRING_PROFILES_ACTIVE: local
+  SERVER_PORT: "8080"
+  DB_HOST: postgres
+  KAFKA_BOOTSTRAP: kafka:19092
+  REDIS_HOST: redis
+  HIRETRACK_KEYS_DIR: /keys
+  HIRETRACK_LOG_DIR: /logs
+  HIRETRACK_INTERNAL_TOKEN: ${HIRETRACK_INTERNAL_TOKEN:-dev-internal-token}
+  OTLP_TRACING_ENDPOINT: http://tempo:4318/v1/traces
+  TRACING_SAMPLE_RATE: "1.0"
+
+x-java: &java
+  restart: unless-stopped
+  mem_limit: 768m
+  volumes:
+    - ./dev-keys:/keys:ro
+    - ../logs:/logs
+  healthcheck:
+    test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health/readiness"]
+    interval: 10s
+    timeout: 3s
+    retries: 30
+    start_period: 60s
+  depends_on:
+    postgres: { condition: service_healthy }
+    kafka: { condition: service_healthy }
+    redis: { condition: service_healthy }
+
+services:
+  identity-service:
+    <<: *java
+    build: { context: .., dockerfile: deploy/docker/Dockerfile.service, args: { SERVICE: identity-service } }
+    image: hiretrack/identity-service:local
+    environment:
+      <<: *java-env
+      COOKIE_SECURE: "false"            # plain http://localhost; true behind HTTPS
+    ports: ["8081:8080"]
+
+  resume-service:
+    <<: *java
+    build: { context: .., dockerfile: deploy/docker/Dockerfile.service, args: { SERVICE: resume-service } }
+    image: hiretrack/resume-service:local
+    environment:
+      <<: *java-env
+      S3_ENDPOINT: http://s3mock:9090
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+      s3mock: { condition: service_healthy }
+    ports: ["8082:8080"]
+
+  ai-service:
+    <<: *java
+    build: { context: .., dockerfile: deploy/docker/Dockerfile.service, args: { SERVICE: ai-service } }
+    image: hiretrack/ai-service:local
+    env_file:
+      - path: ../.env                   # OPENAI_API_KEY, OPENAI_MODEL, OPENAI_FEED_MODEL, AI_PROVIDER ...
+        required: true
+    environment:
+      <<: *java-env
+    ports: ["8083:8080"]
+
+  match-service:
+    <<: *java
+    build: { context: .., dockerfile: deploy/docker/Dockerfile.service, args: { SERVICE: match-service } }
+    image: hiretrack/match-service:local
+    environment:
+      <<: *java-env
+      RESUME_SERVICE_URL: http://resume-service:8080
+      AI_SERVICE_URL: http://ai-service:8080
+    ports: ["8084:8080"]
+
+  application-service:
+    <<: *java
+    build: { context: .., dockerfile: deploy/docker/Dockerfile.service, args: { SERVICE: application-service } }
+    image: hiretrack/application-service:local
+    environment:
+      <<: *java-env
+      MATCH_SERVICE_URL: http://match-service:8080
+    ports: ["8085:8080"]
+
+  job-feed-service:
+    <<: *java
+    build: { context: .., dockerfile: deploy/docker/Dockerfile.service, args: { SERVICE: job-feed-service } }
+    image: hiretrack/job-feed-service:local
+    env_file:
+      - path: ../.env                   # ADZUNA_APP_ID, ADZUNA_APP_KEY
+        required: true
+    environment:
+      <<: *java-env
+      RESUME_SERVICE_URL: http://resume-service:8080
+      AI_SERVICE_URL: http://ai-service:8080
+      APPLICATION_SERVICE_URL: http://application-service:8080
+    ports: ["8086:8080"]
+
+  analytics-service:
+    <<: *java
+    build: { context: .., dockerfile: deploy/docker/Dockerfile.service, args: { SERVICE: analytics-service } }
+    image: hiretrack/analytics-service:local
+    environment:
+      <<: *java-env
+    ports: ["8087:8080"]
+
+  api-gateway:
+    <<: *java
+    build: { context: .., dockerfile: deploy/docker/Dockerfile.service, args: { SERVICE: api-gateway } }
+    image: hiretrack/api-gateway:local
+    environment:
+      <<: *java-env
+      IDENTITY_URL: http://identity-service:8080
+      RESUME_URL: http://resume-service:8080
+      MATCH_URL: http://match-service:8080
+      APPLICATION_URL: http://application-service:8080
+      FEED_URL: http://job-feed-service:8080
+      ANALYTICS_URL: http://analytics-service:8080
+      ALLOWED_ORIGINS: http://localhost
+    depends_on:
+      redis: { condition: service_healthy }
+      identity-service: { condition: service_healthy }
+    ports: ["8080:8080"]
+
+  frontend:
+    build: { context: .., dockerfile: deploy/docker/Dockerfile.frontend }
+    image: hiretrack/frontend:local
+    restart: unless-stopped
+    depends_on:
+      api-gateway: { condition: service_healthy }
+    ports: ["80:80"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]   # not localhost: that resolves to ::1 and nginx listens on IPv4
+      interval: 10s
+      retries: 10

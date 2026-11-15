@@ -1,0 +1,6 @@
+name: hiretrack
+services:
+  prometheus:
+    volumes:
+      - ./prometheus-compose.yml:/etc/prometheus/prometheus.yml:ro
+      - ./rules:/etc/prometheus/rules:ro

@@ -43,7 +43,7 @@ EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
 ```
 
-`.dockerignore` (repository root), which keeps the build context small:
+`.dockerignore` in `hiretrack/` (the build context, next to `settings.gradle.kts`; Docker ignores it anywhere else), which keeps the build context small:
 
 ```text
 .git
@@ -263,7 +263,7 @@ services:
       api-gateway: { condition: service_healthy }
     ports: ["80:80"]
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]   # not localhost: that resolves to ::1 and nginx listens on IPv4
       interval: 10s
       retries: 10
 ```
