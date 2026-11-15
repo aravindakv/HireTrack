@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Deletes every record of one user across all services. Irreversible. Usage: tools/delete-user.sh <userId>
 set -euo pipefail
-U="$1"
+U="${1:-}"
+[[ "$U" =~ ^[0-9]+$ ]] || { echo "Usage: tools/delete-user.sh <userId>  (userId must be numeric)"; exit 1; }
 read -r -p "Permanently delete ALL data for user $U? Type the user ID again to confirm: " again
 [ "$again" = "$U" ] || { echo "Cancelled."; exit 1; }
 
