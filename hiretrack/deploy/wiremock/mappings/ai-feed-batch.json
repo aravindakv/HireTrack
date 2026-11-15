@@ -1,0 +1,12 @@
+{
+  "mappings": [
+    { "request": { "method": "POST", "url": "/internal/feed-batches" },
+      "response": { "status": 200, "headers": { "Content-Type": "application/json" },
+                    "body": "{\"batchId\":\"{{jsonPath request.body '$.items[0].customId'}}\"}",
+                    "transformers": ["response-template"] } },
+    { "request": { "method": "GET", "urlPathPattern": "/internal/feed-batches/.+" },
+      "response": { "status": 200, "headers": { "Content-Type": "application/json" },
+                    "body": "{\"status\":\"ENDED\",\"items\":[{\"customId\":\"{{request.pathSegments.[2]}}\",\"status\":\"SUCCEEDED\",\"scores\":[]}]}",
+                    "transformers": ["response-template"] } }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "request": { "method": "GET", "urlPathPattern": "/v1/api/jobs/[a-z]{2}/search/1" },
+  "response": {
+    "status": 200, "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "results": [
+      { "id": "ad-1", "title": "Java Backend Engineer", "company": { "display_name": "Globex" },
+        "location": { "display_name": "Bangalore" }, "redirect_url": "https://example.com/ad-1",
+        "description": "Java, Spring Boot, Kafka microservices", "salary_min": 2000000, "created": "2026-11-10T08:00:00Z" },
+      { "id": "ad-2", "title": "Pastry Chef", "company": { "display_name": "Bakery" },
+        "location": { "display_name": "Bangalore" }, "redirect_url": "https://example.com/ad-2",
+        "description": "Croissants and cakes", "created": "2026-11-11T08:00:00Z" }
+    ] }
+  }
+}
