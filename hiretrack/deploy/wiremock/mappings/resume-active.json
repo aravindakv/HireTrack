@@ -1,0 +1,5 @@
+{
+  "request": { "method": "GET", "urlPathPattern": "/internal/users/[0-9]+/active-resume" },
+  "response": { "status": 200, "headers": { "Content-Type": "application/json" },
+                "jsonBody": { "resumeId": 7, "content": "Java, Spring Boot, PostgreSQL" } }
+}

@@ -1,0 +1,6 @@
+{
+  "request": { "method": "POST", "url": "/internal/match" },
+  "response": { "status": 200, "fixedDelayMilliseconds": 1500, "headers": { "Content-Type": "application/json" },
+                "jsonBody": { "fitScore": 71, "missingSkills": ["Kafka"], "suggestedBullets": ["b1", "b2", "b3"],
+                              "company": "Acme", "role": "Backend Engineer", "provider": "fake", "model": "fake" } }
+}
