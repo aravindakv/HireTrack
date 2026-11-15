@@ -774,7 +774,7 @@ Extend `.github/workflows/ci.yml`:
       - uses: gradle/actions/setup-gradle@v4
       - run: ./gradlew :services:${{ matrix.service }}:bootJar --no-daemon
       - run: docker build -f deploy/docker/Dockerfile.service --build-arg SERVICE=${{ matrix.service }} -t hiretrack/${{ matrix.service }}:ci .
-      - uses: aquasecurity/trivy-action@0.28.0
+      - uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: hiretrack/${{ matrix.service }}:ci
           severity: HIGH,CRITICAL
