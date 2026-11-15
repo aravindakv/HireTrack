@@ -3,8 +3,10 @@ package com.aravindakv.hiretrack.application.service;
 import com.aravindakv.hiretrack.application.domain.Interview;
 import com.aravindakv.hiretrack.application.domain.JobApplication;
 import com.aravindakv.hiretrack.common.events.EventEnvelope;
+import com.aravindakv.hiretrack.common.events.EventTypes;
 import com.aravindakv.hiretrack.common.events.Topics;
 import com.aravindakv.hiretrack.outbox.OutboxWriter;
+import io.micrometer.core.instrument.MeterRegistry;
 import tools.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 
@@ -22,10 +24,12 @@ public class ApplicationEvents {
 
     private final OutboxWriter outbox;
     private final ObjectMapper json;
+    private final MeterRegistry meters;
 
-    public ApplicationEvents(OutboxWriter outbox, ObjectMapper json) {
+    public ApplicationEvents(OutboxWriter outbox, ObjectMapper json, MeterRegistry meters) {
         this.outbox = outbox;
         this.json = json;
+        this.meters = meters;
     }
 
     public void application(String type, JobApplication a, String fromStage) {
@@ -33,6 +37,9 @@ public class ApplicationEvents {
                 fromStage, a.getAppliedDate(), a.getRespondedAt());
         outbox.write(Topics.APPLICATION_EVENTS, EventEnvelope.create(type, a.getUserId(),
                 "application-" + a.getId(), a.getVersion(), snapshot, json));
+        if (EventTypes.APPLICATION_STAGE_CHANGED.equals(type) && fromStage != null) {   // "Stage changes per day" panel
+            meters.counter("hiretrack.applications.stage.changes", "from", fromStage, "to", a.getStage().name()).increment();
+        }
     }
 
     public void interview(String type, long userId, Interview i) {
