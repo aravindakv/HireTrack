@@ -1,0 +1,111 @@
+groups:
+  - name: slo-recording
+    rules:
+      # Availability: non-AI gateway requests, 5xx = bad
+      - record: hiretrack:api_error_ratio:rate5m
+        expr: |
+          sum(rate(http_server_requests_seconds_count{service="api-gateway",uri!~".*matches.*",status=~"5.."}[5m]))
+          / sum(rate(http_server_requests_seconds_count{service="api-gateway",uri!~".*matches.*"}[5m]))
+      - record: hiretrack:api_error_ratio:rate1h
+        expr: |
+          sum(rate(http_server_requests_seconds_count{service="api-gateway",uri!~".*matches.*",status=~"5.."}[1h]))
+          / sum(rate(http_server_requests_seconds_count{service="api-gateway",uri!~".*matches.*"}[1h]))
+      - record: hiretrack:api_error_ratio:rate6h
+        expr: |
+          sum(rate(http_server_requests_seconds_count{service="api-gateway",uri!~".*matches.*",status=~"5.."}[6h]))
+          / sum(rate(http_server_requests_seconds_count{service="api-gateway",uri!~".*matches.*"}[6h]))
+      - record: hiretrack:api_error_ratio:rate3d
+        expr: |
+          sum(rate(http_server_requests_seconds_count{service="api-gateway",uri!~".*matches.*",status=~"5.."}[3d]))
+          / sum(rate(http_server_requests_seconds_count{service="api-gateway",uri!~".*matches.*"}[3d]))
+      # Read latency p95 per service
+      - record: hiretrack:read_latency_p95:5m
+        expr: |
+          histogram_quantile(0.95, sum by (service, le) (
+            rate(http_server_requests_seconds_bucket{method="GET",uri!~"/actuator.*"}[5m])))
+      # AI match latency p95 and success ratio
+      - record: hiretrack:ai_match_latency_p95:10m
+        expr: histogram_quantile(0.95, sum by (le) (rate(hiretrack_ai_latency_seconds_bucket{operation="MATCH"}[10m])))
+      - record: hiretrack:ai_match_success_ratio:1h
+        expr: |
+          sum(rate(hiretrack_ai_requests_total{operation="MATCH",outcome="ok"}[1h]))
+          / sum(rate(hiretrack_ai_requests_total{operation="MATCH",outcome!~"busy"}[1h]))
+      # Spend
+      - record: hiretrack:ai_cost_usd:24h
+        expr: sum(increase(hiretrack_ai_cost_usd_total[24h]))
+
+  - name: slo-alerts
+    rules:
+      # 99.9% → error budget 0.001. Fast burn: 2% of the monthly budget in 1 hour (14.4×).
+      - alert: ApiErrorBudgetFastBurn
+        expr: hiretrack:api_error_ratio:rate5m > (14.4 * 0.001) and hiretrack:api_error_ratio:rate1h > (14.4 * 0.001)
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: API is burning its error budget fast
+          runbook: docs/runbooks/api-errors.md
+      # Slow burn: 10% of the budget in 3 days (1×), checked over 6h and 3d.
+      - alert: ApiErrorBudgetSlowBurn
+        expr: hiretrack:api_error_ratio:rate6h > 0.001 and hiretrack:api_error_ratio:rate3d > 0.001
+        for: 1h
+        labels: { severity: ticket }
+        annotations:
+          summary: API error rate is above the SLO
+          runbook: docs/runbooks/api-errors.md
+      - alert: ReadLatencyHigh
+        expr: hiretrack:read_latency_p95:5m > 0.3
+        for: 10m
+        labels: { severity: ticket }
+        annotations:
+          summary: "p95 read latency above 300 ms on {{ $labels.service }}"
+          runbook: docs/runbooks/latency.md
+      - alert: AiMatchLatencyHigh
+        expr: hiretrack:ai_match_latency_p95:10m > 15
+        for: 10m
+        labels: { severity: page }
+        annotations:
+          summary: AI match p95 above 15 s
+          runbook: docs/runbooks/ai.md
+      - alert: AiMatchSuccessLow
+        expr: hiretrack:ai_match_success_ratio:1h < 0.99
+        for: 15m
+        labels: { severity: page }
+        annotations:
+          summary: AI match success below 99%
+          runbook: docs/runbooks/ai.md
+      - alert: AiSpendOverBudget
+        expr: hiretrack:ai_cost_usd:24h > 1.2 * 50        # replace 50 with your daily AI budget in USD
+        labels: { severity: page }
+        annotations:
+          summary: AI spend in the last 24 h is above 120% of budget
+          runbook: docs/runbooks/ai.md
+      - alert: OutboxStuck
+        expr: max by (service) (hiretrack_outbox_oldest_unpublished_seconds) > 60
+        for: 2m
+        labels: { severity: page }
+        annotations:
+          summary: "{{ $labels.service }} can't publish events to Kafka"
+          runbook: docs/runbooks/events.md
+      - alert: ConsumerLagHigh
+        expr: sum by (service) (kafka_consumer_fetch_manager_records_lag_max) > 1000
+        for: 10m
+        labels: { severity: ticket }
+        annotations:
+          summary: "{{ $labels.service }} is falling behind on Kafka"
+          runbook: docs/runbooks/events.md
+      - alert: DbPoolSaturated
+        expr: max by (service) (hikaricp_connections_pending) > 0
+        for: 5m
+        labels: { severity: ticket }
+        annotations:
+          summary: "{{ $labels.service }} is waiting for database connections"
+          runbook: docs/runbooks/latency.md
+      - alert: FeedRunsFailing
+        expr: |
+          sum(increase(hiretrack_feed_runs_total{status="FAILED"}[1h]))
+          / clamp_min(sum(increase(hiretrack_feed_runs_total[1h])), 1) > 0.01
+        for: 30m
+        labels: { severity: ticket }
+        annotations:
+          summary: More than 1% of feed runs failed in the last hour
+          runbook: docs/runbooks/feed.md

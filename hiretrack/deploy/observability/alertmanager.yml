@@ -1,0 +1,13 @@
+route:
+  receiver: default
+  group_by: [alertname, service]
+  routes:
+    - matchers: [severity="page"]
+      receiver: pager
+receivers:
+  - name: default
+  - name: pager
+    # Replace with your Slack/PagerDuty/email receiver. Locally, alerts are visible at http://localhost:9093
+    webhook_configs:
+      - url: http://host.docker.internal:9999/alerts
+        send_resolved: true

@@ -1,0 +1,25 @@
+server:
+  http_listen_port: 9080
+positions:
+  filename: /tmp/positions.yaml
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+scrape_configs:
+  - job_name: hiretrack
+    static_configs:
+      - targets: [localhost]
+        labels:
+          job: hiretrack
+          __path__: /var/log/hiretrack/*.log
+    pipeline_stages:
+      - regex:
+          source: filename
+          expression: '/var/log/hiretrack/(?P<service>[a-z-]+)\.log'
+      - labels:
+          service:
+      - json:
+          expressions:
+            level: log.level
+            trace_id: trace.id
+      - labels:
+          level:

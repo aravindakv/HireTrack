@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: hiretrack
+    folder: HireTrack
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

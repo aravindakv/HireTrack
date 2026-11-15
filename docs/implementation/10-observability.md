@@ -451,6 +451,8 @@ Write the other runbooks the same way:
 
 ```bash
 docker compose -f deploy/observability/docker-compose.observability.yml up -d
+# Grafana uses host port 3000; if that's taken (VS Code often holds it), pick another:
+#   GRAFANA_PORT=3002 docker compose -f deploy/observability/docker-compose.observability.yml up -d
 # restart running services so they pick up the Kafka observation settings
 ```
 
@@ -458,7 +460,7 @@ docker compose -f deploy/observability/docker-compose.observability.yml up -d
 
 1. **Prometheus targets:** `http://localhost:9090/targets` lists the eight `hiretrack` targets as **UP** for the services you're running.
 2. **Rules loaded:** `http://localhost:9090/rules` shows `slo-recording` and `slo-alerts`.
-3. **One trace end to end:** run a match through the frontend or gateway. In Grafana (`http://localhost:3000`) open Explore → Tempo → Search → service `api-gateway`. Open the newest `POST /api/v1/matches` trace. It contains spans for `api-gateway` → `match-service` → `resume-service` (GET) → `ai-service` → the HTTPS call to the provider. The provider span takes most of the time.
+3. **One trace end to end:** run a match through the frontend or gateway. In Grafana (`http://localhost:3000`, or your `GRAFANA_PORT`) open Explore → Tempo → Search → service `api-gateway`. Open the newest `POST /api/v1/matches` trace. It contains spans for `api-gateway` → `match-service` → `resume-service` (GET) → `ai-service` → the HTTPS call to the provider. The provider span takes most of the time.
 4. **Logs to trace:** Explore → Loki: `{job="hiretrack", service="match-service"}`. Expand a line and click the `traceId` link: it opens the same trace.
 5. **AI dashboard:** Dashboards → HireTrack → "AI and cost" shows real token counts and spend after one real match. Spend shows 0 until you set prices.
 6. **An alert fires:** stop Kafka (`docker compose -f deploy/docker-compose.yml stop kafka`), then create an application. Within about 3 minutes `OutboxStuck` is **firing** at `http://localhost:9093`. Start Kafka again; the alert resolves, and the event is delivered (check analytics).
@@ -466,7 +468,7 @@ docker compose -f deploy/observability/docker-compose.observability.yml up -d
 ## Phase demo
 
 ```bash
-curl -s localhost:9090/api/v1/query --data-urlencode 'query=up{job="hiretrack"}' | jq -r '.data.result[] | "\(.labels.instance) \(.value[1])"'
+curl -s localhost:9090/api/v1/query --data-urlencode 'query=up{job="hiretrack"}' | jq -r '.data.result[] | "\(.metric.instance) \(.value[1])"'
 curl -s localhost:9090/api/v1/query --data-urlencode 'query=sum(hiretrack_ai_requests_total) by (outcome)' | jq -c '.data.result'
 curl -s 'localhost:3200/api/search?tags=service.name%3Dmatch-service&limit=1' | jq '.traces | length'
 ```
