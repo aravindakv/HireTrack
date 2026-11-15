@@ -1307,6 +1307,7 @@ import org.springframework.cloud.gateway.route.RouteLocator;
 import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Primary;
 import reactor.core.publisher.Mono;
 
@@ -1348,7 +1349,8 @@ public class RoutesConfig {
 
     @Bean
     RouteLocator routes(RouteLocatorBuilder builder, GatewayProperties props, KeyResolver keys,
-                        RedisRateLimiter defaultRateLimiter, RedisRateLimiter expensiveRateLimiter) {
+                        RedisRateLimiter defaultRateLimiter,
+                        @Qualifier("expensiveRateLimiter") RedisRateLimiter expensiveRateLimiter) {
         GatewayProperties.Routes r = props.routes();
         return builder.routes()
                 .route("identity", p -> p.path("/api/v1/auth/**")
